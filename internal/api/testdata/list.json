@@ -1,0 +1,20 @@
+{
+  "node": {
+    "name": "Node",
+    "fileName": "Node.gitignore",
+    "contents": "node_modules/\n",
+    "key": "node"
+  },
+  "go": {
+    "name": "Go",
+    "fileName": "Go.gitignore",
+    "contents": "bin/\n",
+    "key": "go"
+  },
+  "macos": {
+    "name": "macOS",
+    "fileName": "macOS.gitignore",
+    "contents": ".DS_Store\n",
+    "key": "macos"
+  }
+}
