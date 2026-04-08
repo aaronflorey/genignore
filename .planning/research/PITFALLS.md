@@ -15,7 +15,7 @@ The tool rewrites the full file (or mis-parses marker boundaries), deleting user
 Implementations treat `.gitignore` as tool-owned, not *partially* tool-owned.
 
 **How to avoid:**
-- Treat only `# BEGIN gitignore-gen` ... `# END gitignore-gen` as mutable.
+- Treat only `# BEGIN genignore` ... `# END genignore` as mutable.
 - On missing markers: prepend generated block, append original file unchanged.
 - Write via temp file + atomic replace (never truncate first, then write).
 - Add invariant tests: “bytes before marker unchanged”, “bytes after marker unchanged”.

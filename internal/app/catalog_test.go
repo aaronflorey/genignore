@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aaronflorey/gitignore-gen/internal/provider"
+	"github.com/aaronflorey/genignore/internal/provider"
 )
 
 func TestListProviders(t *testing.T) {

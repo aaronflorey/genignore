@@ -168,7 +168,7 @@ return os.WriteFile(path, []byte(updated), 0o644)
 ### Safer durable write pattern
 ```go
 // Source: os docs (WriteFile/CreateTemp/Sync/Rename)
-tmp, err := os.CreateTemp(filepath.Dir(path), ".gitignore-gen-*")
+tmp, err := os.CreateTemp(filepath.Dir(path), ".genignore-*")
 if err != nil { return err }
 defer os.Remove(tmp.Name())
 

@@ -1,4 +1,4 @@
-# Roadmap: gitignore-gen
+# Roadmap: genignore
 
 ## Overview
 
@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Phase 1
 **Requirements**: CMD-05, CMD-06, DET-03, DET-04, API-01, API-02, API-03
 **Success Criteria** (what must be TRUE):
-  1. User can run `gitignore-gen add <keys...>` and only missing valid providers are appended to the managed set.
+  1. User can run `genignore add <keys...>` and only missing valid providers are appended to the managed set.
   2. User can list/search supported provider keys before generating.
   3. User sees unsupported keys reported as warnings while valid keys still proceed.
   4. User gets alphabetically ordered providers in file metadata, API requests, and command outputs.
@@ -53,7 +53,7 @@ Plans:
 **Depends on**: Phase 2
 **Requirements**: CMD-01, CMD-02, CMD-03, CMD-04, DET-01, DET-02
 **Success Criteria** (what must be TRUE):
-  1. User can run `gitignore-gen detect` and receive providers inferred from project files/folders, OS, and installed software signals.
+  1. User can run `genignore detect` and receive providers inferred from project files/folders, OS, and installed software signals.
   2. User can run `detect --include` and `detect --exclude` to force-add or remove providers from the detected set before generation.
   3. User sees a hard error when `detect` resolves to an empty final provider set.
   4. User can inspect detection evidence (`reason`, `source`, `path` when available) in verbose or JSON output.

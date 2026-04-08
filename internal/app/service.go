@@ -6,9 +6,9 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/aaronflorey/gitignore-gen/internal/api"
-	"github.com/aaronflorey/gitignore-gen/internal/gitignore"
-	"github.com/aaronflorey/gitignore-gen/internal/provider"
+	"github.com/aaronflorey/genignore/internal/api"
+	"github.com/aaronflorey/genignore/internal/gitignore"
+	"github.com/aaronflorey/genignore/internal/provider"
 )
 
 type APIClient interface {

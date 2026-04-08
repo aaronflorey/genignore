@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aaronflorey/gitignore-gen/internal/api"
-	"github.com/aaronflorey/gitignore-gen/internal/gitignore"
-	"github.com/aaronflorey/gitignore-gen/internal/provider"
+	"github.com/aaronflorey/genignore/internal/api"
+	"github.com/aaronflorey/genignore/internal/gitignore"
+	"github.com/aaronflorey/genignore/internal/provider"
 )
 
 const noisyToptalTemplate = `# Created by https://www.toptal.com/developers/gitignore/api/go,macos

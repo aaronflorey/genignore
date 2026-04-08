@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/aaronflorey/gitignore-gen/internal/app"
+	"github.com/aaronflorey/genignore/internal/app"
 )
 
 func main() {

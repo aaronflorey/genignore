@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/aaronflorey/gitignore-gen/internal/provider"
+	"github.com/aaronflorey/genignore/internal/provider"
 )
 
 func ListProviders() []string {

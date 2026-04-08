@@ -61,7 +61,7 @@
 
 ```text
 cmd/
-└── gitignore-gen/
+└── genignore/
     └── main.go                # bootstraps dependencies and executes root command
 
 internal/
@@ -165,7 +165,7 @@ err := repo.Apply(plan)
 ### Detect Flow
 
 ```text
-User: gitignore-gen detect [flags]
+User: genignore detect [flags]
   ↓
 CLI layer parses flags
   ↓
@@ -192,7 +192,7 @@ Presenter renders human or JSON output
 ### Add Flow
 
 ```text
-User: gitignore-gen add <keys...>
+User: genignore add <keys...>
   ↓
 CLI validates args
   ↓
@@ -320,5 +320,5 @@ Domain selection → Managed block planning → FS adapter
 - https://www.toptal.com/developers/gitignore/api/go,node (MEDIUM: confirms merged-template API behavior)
 
 ---
-*Architecture research for: gitignore-gen*
+*Architecture research for: genignore*
 *Researched: 2026-04-07*

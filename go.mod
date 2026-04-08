@@ -1,4 +1,4 @@
-module github.com/aaronflorey/gitignore-gen
+module github.com/aaronflorey/genignore
 
 go 1.22
 

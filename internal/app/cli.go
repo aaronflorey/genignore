@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/aaronflorey/gitignore-gen/internal/provider"
+	"github.com/aaronflorey/genignore/internal/provider"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -32,10 +32,10 @@ func Run(args []string) int {
 
 	service := newCommandService(cwd)
 	root := &cobra.Command{
-		Use:   "gitignore-gen",
+		Use:   "genignore",
 		Short: "Generate and manage gitignore block",
 	}
-	viper.SetEnvPrefix("GITIGNORE_GEN")
+	viper.SetEnvPrefix("GENIGNORE")
 	viper.AutomaticEnv()
 
 	jsonOutput := false

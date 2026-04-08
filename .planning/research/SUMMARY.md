@@ -1,6 +1,6 @@
 # Project Research Summary
 
-**Project:** gitignore-gen
+**Project:** genignore
 **Domain:** Cross-platform Go CLI for deterministic `.gitignore` generation and safe file mutation
 **Researched:** 2026-04-07
 **Confidence:** HIGH
@@ -62,7 +62,7 @@ Architecture should follow clear boundaries: **CLI transport → app use-cases �
 
 ### Critical Pitfalls
 
-1. **Destructive rewrites outside markers** — only mutate `BEGIN/END gitignore-gen` region; prove pre/post bytes are unchanged with fixtures.
+1. **Destructive rewrites outside markers** — only mutate `BEGIN/END genignore` region; prove pre/post bytes are unchanged with fixtures.
 2. **Non-atomic writes corrupting files** — stage+fsync+rename in same directory; never truncate-before-write.
 3. **Provider/API drift and bad request construction** — reconcile against `/api/list`, normalize/sort keys, hard-fail on API errors, contract-test symbol keys (`c++`, `jetbrains+iml`).
 4. **Over-aggressive detection false positives** — prioritize project evidence over global signals and expose evidence for every selected provider.

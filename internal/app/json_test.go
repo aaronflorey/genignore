@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aaronflorey/gitignore-gen/internal/gitignore"
-	"github.com/aaronflorey/gitignore-gen/internal/provider"
+	"github.com/aaronflorey/genignore/internal/gitignore"
+	"github.com/aaronflorey/genignore/internal/provider"
 )
 
 func TestJSONDetectCommandContract(t *testing.T) {

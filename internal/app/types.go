@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/aaronflorey/gitignore-gen/internal/gitignore"
-	"github.com/aaronflorey/gitignore-gen/internal/provider"
+	"github.com/aaronflorey/genignore/internal/gitignore"
+	"github.com/aaronflorey/genignore/internal/provider"
 )
 
 type CommandResult struct {

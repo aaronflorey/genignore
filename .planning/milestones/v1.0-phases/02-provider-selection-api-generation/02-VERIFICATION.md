@@ -19,7 +19,7 @@ overrides_applied: 0
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | User can run `gitignore-gen add <keys...>` and only missing valid providers are appended to the managed set. | ✓ VERIFIED | `internal/app/service.go:146-180` sanitizes input, preserves existing providers, appends only missing keys, and sorts `added`/`finalProviders`; covered by `TestAddAppendsOnlyMissingProviders` and `TestAddMixedSupportedUnsupportedKeys` in `internal/app/service_test.go:79-144`. |
+| 1 | User can run `genignore add <keys...>` and only missing valid providers are appended to the managed set. | ✓ VERIFIED | `internal/app/service.go:146-180` sanitizes input, preserves existing providers, appends only missing keys, and sorts `added`/`finalProviders`; covered by `TestAddAppendsOnlyMissingProviders` and `TestAddMixedSupportedUnsupportedKeys` in `internal/app/service_test.go:79-144`. |
 | 2 | User can list/search supported provider keys before generating. | ✓ VERIFIED | `internal/app/cli.go:89-116` registers `list` and `search`; `internal/app/catalog.go:10-25` provides the data; spot-checks `go run . list` and `go run . search go --json` succeeded. |
 | 3 | User sees unsupported keys reported as warnings while valid keys still proceed. | ✓ VERIFIED | `sanitizeKeys` in `internal/app/service.go:188-200` emits warnings and keeps valid keys; `TestAddMixedSupportedUnsupportedKeys` and `TestUnsupportedWarnings` confirm valid providers still flow through with sorted warnings. |
 | 4 | User gets alphabetically ordered providers in file metadata, API requests, and command outputs. | ✓ VERIFIED | `mapKeysSorted` in `internal/app/service.go:222-228`, provider-list sorting in `internal/api/client.go:56-61`, and catalog/CLI sorting in `internal/app/catalog.go:10-25` and `internal/app/cli.go:189-197`; validated by `TestClientUsesFixtures`, `TestListProviders`, `TestSearchProviders`, `TestListCommand`, and `TestSearchCommandJSON`. |
@@ -71,7 +71,7 @@ overrides_applied: 0
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| `CMD-05` | `02-01-PLAN.md` | User can run `gitignore-gen add <keys...>` to append only missing valid providers to the managed set | ✓ SATISFIED | `service.go:146-180`; `TestAddAppendsOnlyMissingProviders`, `TestAddMixedSupportedUnsupportedKeys`. |
+| `CMD-05` | `02-01-PLAN.md` | User can run `genignore add <keys...>` to append only missing valid providers to the managed set | ✓ SATISFIED | `service.go:146-180`; `TestAddAppendsOnlyMissingProviders`, `TestAddMixedSupportedUnsupportedKeys`. |
 | `CMD-06` | `02-02-PLAN.md` | User can discover available provider keys using list/search command(s) | ✓ SATISFIED | `cli.go:89-116`, `catalog.go:10-25`; `go run . list`; `go run . search go --json`; `TestListCommand`, `TestSearchCommand`, `TestSearchCommandJSON`. |
 | `DET-03` | `02-01-PLAN.md` | User receives warnings for invalid/unsupported provider keys while valid keys still continue | ✓ SATISFIED | `sanitizeKeys` in `service.go:188-200`; tests confirm sorted warnings and preserved valid providers. |
 | `DET-04` | `02-01-PLAN.md`, `02-02-PLAN.md` | User gets deterministic provider ordering for file metadata, API requests, and outputs | ✓ SATISFIED | Sorting in `service.go:175,222-228`, `client.go:60`, `catalog.go:12,24`, `cli.go:194-196`; tests cover API/client/catalog/CLI order. |

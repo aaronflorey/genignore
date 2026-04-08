@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Deliver `gitignore-gen detect` as a deterministic reset flow that infers providers from current-directory project files, runtime OS, and installed software signals, lets users refine the final set with `--include` and `--exclude`, errors when the final set is empty, and exposes detector evidence in verbose and JSON output.
+Deliver `genignore detect` as a deterministic reset flow that infers providers from current-directory project files, runtime OS, and installed software signals, lets users refine the final set with `--include` and `--exclude`, errors when the final set is empty, and exposes detector evidence in verbose and JSON output.
 
 </domain>
 

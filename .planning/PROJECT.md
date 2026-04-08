@@ -1,8 +1,8 @@
-# gitignore-gen
+# genignore
 
 ## What This Is
 
-`gitignore-gen` is a Go CLI that detects relevant `.gitignore` templates for the current project and environment, fetches merged rules from the Toptal gitignore API, and manages only a generated block inside `.gitignore`. It is built for developers who want safe, repeatable ignore generation without losing manual rules outside managed markers.
+`genignore` is a Go CLI that detects relevant `.gitignore` templates for the current project and environment, fetches merged rules from the Toptal gitignore API, and manages only a generated block inside `.gitignore`. It is built for developers who want safe, repeatable ignore generation without losing manual rules outside managed markers.
 
 ## Core Value
 
