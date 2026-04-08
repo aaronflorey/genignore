@@ -1,0 +1,46 @@
+{
+  "model_profile": "balanced",
+  "commit_docs": false,
+  "parallelization": true,
+  "search_gitignored": false,
+  "brave_search": false,
+  "firecrawl": false,
+  "exa_search": false,
+  "git": {
+    "branching_strategy": "none",
+    "phase_branch_template": "gsd/phase-{phase}-{slug}",
+    "milestone_branch_template": "gsd/{milestone}-{slug}",
+    "quick_branch_template": null
+  },
+  "workflow": {
+    "research": true,
+    "plan_check": true,
+    "verifier": true,
+    "nyquist_validation": false,
+    "auto_advance": true,
+    "node_repair": true,
+    "node_repair_budget": 2,
+    "ui_phase": true,
+    "ui_safety_gate": true,
+    "text_mode": false,
+    "research_before_questions": false,
+    "discuss_mode": "discuss",
+    "skip_discuss": false,
+    "_auto_chain_active": true
+  },
+  "hooks": {
+    "context_warnings": true
+  },
+  "project_code": null,
+  "phase_naming": "sequential",
+  "agent_skills": {},
+  "resolve_model_ids": "omit",
+  "model_overrides": {
+    "gsd-planner": "gpt-5.4",
+    "gsd-executor": "gpt-5.3-codex",
+    "gsd-debugger": "gpt-5.3-codex",
+    "gsd-codebase-mapper": "gpt-5.4"
+  },
+  "mode": "yolo",
+  "granularity": "coarse"
+}
