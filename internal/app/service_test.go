@@ -6,12 +6,29 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aaronflorey/gitignore-gen/internal/api"
 	"github.com/aaronflorey/gitignore-gen/internal/gitignore"
 	"github.com/aaronflorey/gitignore-gen/internal/provider"
 )
+
+const noisyToptalTemplate = `# Created by https://www.toptal.com/developers/gitignore/api/go,macos
+# Edit at https://www.toptal.com/developers/gitignore?templates=go,macos
+
+### Go ###
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+
+### macOS ###
+.DS_Store
+
+# End of https://www.toptal.com/developers/gitignore/api/go,macos
+`
 
 type fakeAPI struct {
 	available    []string
@@ -432,5 +449,101 @@ func TestDetectReturnsDetectionResultsSortedByProviderKey(t *testing.T) {
 	}
 	if !reflect.DeepEqual(keys, []string{"go", "node", "react"}) {
 		t.Fatalf("unexpected detection result order: %v", keys)
+	}
+}
+
+func TestDetectWritesCleanManagedBlockAndPreservesUserLines(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"# user-owned rule",
+		gitignore.StartMarker,
+		"# old block",
+		gitignore.EndMarker,
+		".planning",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed write failed: %v", err)
+	}
+
+	client := &fakeAPI{available: provider.SupportedKeys, template: noisyToptalTemplate}
+	svc := &Service{
+		CWD:     dir,
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"go": matchedDetector("go"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if res.FileAction != gitignore.FileActionUpdated {
+		t.Fatalf("unexpected file action: %s", res.FileAction)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+	if strings.Contains(value, "# Created by https://www.toptal.com/developers/gitignore/api/go,macos") {
+		t.Fatalf("expected detect output to strip Toptal provenance comments\n%s", value)
+	}
+	if !strings.Contains(value, "# user-owned rule") || !strings.Contains(value, ".planning") {
+		t.Fatalf("expected unmanaged user content preserved\n%s", value)
+	}
+}
+
+func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manager := gitignore.NewManager(dir)
+	seed := gitignore.BuildManagedBlock([]string{"go"}, "### Go ###\n*.test\n") + "# local rule\n.env\n"
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed write failed: %v", err)
+	}
+
+	client := &fakeAPI{available: provider.SupportedKeys, template: noisyToptalTemplate}
+	svc := &Service{CWD: dir, Client: client, Manager: manager}
+
+	first, err := svc.Add(context.Background(), AddOptions{Keys: []string{"macos"}})
+	if err != nil {
+		t.Fatalf("first add failed: %v", err)
+	}
+	if first.FileAction != gitignore.FileActionUpdated {
+		t.Fatalf("unexpected first add action: %s", first.FileAction)
+	}
+	firstContent, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read first .gitignore failed: %v", err)
+	}
+
+	second, err := svc.Add(context.Background(), AddOptions{Keys: []string{"macos"}})
+	if err != nil {
+		t.Fatalf("second add failed: %v", err)
+	}
+	if second.FileAction != gitignore.FileActionUpdated {
+		t.Fatalf("unexpected second add action: %s", second.FileAction)
+	}
+	secondContent, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read second .gitignore failed: %v", err)
+	}
+
+	if strings.Contains(string(secondContent), "# End of https://www.toptal.com/developers/gitignore/api/go,macos") {
+		t.Fatalf("expected add output to strip Toptal footer comment\n%s", string(secondContent))
+	}
+	if string(firstContent) != string(secondContent) {
+		t.Fatalf("expected rerun to remain byte-stable\nfirst:\n%s\nsecond:\n%s", string(firstContent), string(secondContent))
+	}
+	if !strings.HasSuffix(string(secondContent), "# local rule\n.env\n") {
+		t.Fatalf("expected unmanaged trailing lines preserved\n%s", string(secondContent))
 	}
 }
