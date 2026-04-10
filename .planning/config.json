@@ -1,6 +1,6 @@
 {
   "model_profile": "balanced",
-  "commit_docs": false,
+  "commit_docs": true,
   "parallelization": true,
   "search_gitignored": false,
   "brave_search": false,
@@ -26,6 +26,7 @@
     "research_before_questions": false,
     "discuss_mode": "discuss",
     "skip_discuss": false,
+    "use_worktrees": false,
     "_auto_chain_active": true
   },
   "hooks": {
