@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed quick task 260411-989
-last_updated: "2026-04-11T06:46:31Z"
+stopped_at: Completed quick task 260411-dnn
+last_updated: "2026-04-11T09:57:28Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 Phase: 5 of 5 (Reliability & Regression Safety)
 Plan: 2 of 2 in current phase
 Status: v1.0 milestone complete and archived
-Last activity: 2026-04-11 - Completed quick task 260411-anz: if you detect that macos, linux or windows, was already in the genignore block when overwriting, then include those. eg. if i run genignore on mac, and then someone else runs it on linux, currently it would remove mac, but we should keep it.
+Last activity: 2026-04-11 - Completed quick task 260411-dnn: add detection for installed IDEs on both macOS and Linux and infer phpstorm/goland from project language signals when JetBrains is installed.
 
 Progress: [██████████] 100%
 
@@ -82,9 +82,10 @@ None currently.
 | 260411-47x | dedupe unmanaged .gitignore lines that safely match generated managed rules | 2026-04-11 | bb00825 | [260411-47x-before-writing-the-generated-gitignore-c](./quick/260411-47x-before-writing-the-generated-gitignore-c/) |
 | 260411-989 | please setup a workflow for testing the code and linting on each commit/pr | 2026-04-11 | 8cd813b | [260411-989-please-setup-a-workflow-for-testing-the-](./quick/260411-989-please-setup-a-workflow-for-testing-the-/) |
 | 260411-anz | if you detect that macos, linux or windows, was already in the genignore block when overwriting, then include those. eg. if i run genignore on mac, and then someone else runs it on linux, currently it would remove mac, but we should keep it. | 2026-04-11 | 9a8770b | [260411-anz-if-you-detect-that-macos-linux-or-window](./quick/260411-anz-if-you-detect-that-macos-linux-or-window/) |
+| 260411-dnn | add detection for installed IDEs on both macOS and Linux and infer phpstorm/goland from project language signals when JetBrains is installed | 2026-04-11 | 316dda9 | [260411-dnn-add-detection-for-installed-ides-on-both](./quick/260411-dnn-add-detection-for-installed-ides-on-both/) |
 
 ## Session Continuity
 
-Last session: 2026-04-11 06:46
-Stopped at: Completed quick task 260411-989
-Resume file: .planning/quick/260411-989-please-setup-a-workflow-for-testing-the-/260411-989-SUMMARY.md
+Last session: 2026-04-11 09:57
+Stopped at: Completed quick task 260411-dnn
+Resume file: .planning/quick/260411-dnn-add-detection-for-installed-ides-on-both/260411-dnn-SUMMARY.md
