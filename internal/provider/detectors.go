@@ -67,6 +67,11 @@ var ideInstallCandidatesByKey = map[string][]string{
 		"/opt/appcode",
 		"/opt/AppCode",
 	},
+	"androidstudio": {
+		"/Applications/Android Studio.app",
+		"/opt/android-studio",
+		"/opt/AndroidStudio",
+	},
 }
 
 type DetectorFunc func(ctx context.Context, cwd string) Result
@@ -93,13 +98,14 @@ func Registry() map[string]Detector {
 		"phpstorm":         ideWithJetBrainsLanguageInferenceDetector("phpstorm", "composer.json"),
 		"jetbrains":        ideDetector("jetbrains"),
 		"intellij":         ideDetector("intellij"),
-		"pycharm":          ideDetector("pycharm"),
-		"webstorm":         ideDetector("webstorm"),
+		"pycharm":          ideWithJetBrainsSignalDetector("pycharm", signalDetector{reason: "python project file", match: anyFileSignal("pyproject.toml", "requirements.txt", "setup.py")}),
+		"webstorm":         ideWithJetBrainsLanguageInferenceDetector("webstorm", "package.json"),
 		"goland":           ideWithJetBrainsLanguageInferenceDetector("goland", "go.mod"),
-		"rubymine":         ideDetector("rubymine"),
-		"rider":            ideDetector("rider"),
-		"clion":            ideDetector("clion"),
+		"rubymine":         ideWithJetBrainsLanguageInferenceDetector("rubymine", "Gemfile"),
+		"rider":            ideWithJetBrainsSignalDetector("rider", signalDetector{reason: ".sln/.csproj", match: anyGlobSignal(".sln/.csproj", "*.sln", "*.csproj")}),
+		"clion":            ideWithJetBrainsLanguageInferenceDetector("clion", "CMakeLists.txt"),
 		"appcode":          ideDetector("appcode"),
+		"androidstudio":    ideDetector("androidstudio"),
 	}
 }
 
@@ -108,6 +114,10 @@ func ideDetector(key string) Detector {
 }
 
 func ideWithJetBrainsLanguageInferenceDetector(key, signalFile string) Detector {
+	return ideWithJetBrainsSignalDetector(key, signalDetector{reason: signalFile, match: fileSignal(signalFile)})
+}
+
+func ideWithJetBrainsSignalDetector(key string, signal signalDetector) Detector {
 	base := ideDetector(key)
 	return DetectorFunc(func(ctx context.Context, cwd string) Result {
 		result := base.Detect(ctx, cwd)
@@ -115,8 +125,8 @@ func ideWithJetBrainsLanguageInferenceDetector(key, signalFile string) Detector 
 			return result
 		}
 
-		signalPath := filepath.Join(cwd, signalFile)
-		if _, err := os.Stat(signalPath); err != nil {
+		matchedSignal, ok := signal.match(cwd)
+		if !ok {
 			return result
 		}
 
@@ -125,8 +135,54 @@ func ideWithJetBrainsLanguageInferenceDetector(key, signalFile string) Detector 
 			return result
 		}
 
-		return Result{Key: key, Matched: true, Reason: "inferred from jetbrains install and " + signalFile, Evidence: jetbrains.Evidence}
+		reason := signal.reason
+		if matchedSignal != "" {
+			reason = matchedSignal
+		}
+
+		return Result{Key: key, Matched: true, Reason: "inferred from jetbrains install and " + reason, Evidence: jetbrains.Evidence}
 	})
+}
+
+type signalDetector struct {
+	reason string
+	match  func(cwd string) (string, bool)
+}
+
+func fileSignal(fileName string) func(cwd string) (string, bool) {
+	return func(cwd string) (string, bool) {
+		path := filepath.Join(cwd, fileName)
+		if _, err := os.Stat(path); err == nil {
+			return fileName, true
+		}
+		return "", false
+	}
+}
+
+func anyFileSignal(fileNames ...string) func(cwd string) (string, bool) {
+	return func(cwd string) (string, bool) {
+		for _, fileName := range fileNames {
+			if matched, ok := fileSignal(fileName)(cwd); ok {
+				return matched, true
+			}
+		}
+		return "", false
+	}
+}
+
+func anyGlobSignal(reason string, patterns ...string) func(cwd string) (string, bool) {
+	return func(cwd string) (string, bool) {
+		for _, pattern := range patterns {
+			matches, err := filepath.Glob(filepath.Join(cwd, pattern))
+			if err != nil {
+				continue
+			}
+			if len(matches) > 0 {
+				return reason, true
+			}
+		}
+		return "", false
+	}
 }
 
 func ideInstallCandidatesForKey(key string) []string {
