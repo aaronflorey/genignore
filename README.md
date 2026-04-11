@@ -102,6 +102,15 @@ Everything outside that block is preserved on every run.
 
 - Filters supported provider keys by a search term.
 
+## Development checks
+
+Run the same checks used in CI before pushing changes:
+
+```bash
+go test ./...
+golangci-lint run
+```
+
 ## Notes
 
 - The Toptal gitignore API is required at runtime.

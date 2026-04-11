@@ -45,7 +45,9 @@ func (c *Client) AvailableProviders(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request list API: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		_ = res.Body.Close()
+	}()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, fmt.Errorf("list API returned status %d", res.StatusCode)
 	}
@@ -75,7 +77,9 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 	if err != nil {
 		return TemplateResponse{}, fmt.Errorf("request template API: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		_ = res.Body.Close()
+	}()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return TemplateResponse{}, fmt.Errorf("template API returned status %d", res.StatusCode)
 	}
