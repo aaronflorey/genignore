@@ -147,3 +147,123 @@ func TestVueAndReactDetectorsMatchOnlyRealPackageSignals(t *testing.T) {
 		t.Fatalf("unexpected react result: %+v", react)
 	}
 }
+
+func TestIDEDetectorsMatchConfiguredMacAndLinuxInstallCandidates(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		installRel string
+	}{
+		{name: "macOS-style app bundle", installRel: "Applications/PhpStorm.app"},
+		{name: "linux-style install dir", installRel: "opt/phpstorm"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			installPath := filepath.Join(root, filepath.FromSlash(tc.installRel))
+			if err := os.MkdirAll(installPath, 0o755); err != nil {
+				t.Fatalf("mkdir install path: %v", err)
+			}
+
+			original := ideInstallCandidatesByKey
+			ideInstallCandidatesByKey = map[string][]string{
+				"phpstorm": {filepath.Join(root, "Applications", "PhpStorm.app"), filepath.Join(root, "opt", "phpstorm")},
+			}
+			t.Cleanup(func() {
+				ideInstallCandidatesByKey = original
+			})
+
+			result := Registry()["phpstorm"].Detect(context.Background(), root)
+			expected := Result{Key: "phpstorm", Matched: true, Reason: "detected installed application", Evidence: installPath}
+			if result != expected {
+				t.Fatalf("unexpected result: %+v", result)
+			}
+		})
+	}
+}
+
+func TestJetBrainsLanguageInferencePrefersPhpStormForPHPProjects(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "IDEA-U")
+	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+		t.Fatalf("mkdir jetbrains path: %v", err)
+	}
+	composerPath := filepath.Join(root, "composer.json")
+	if err := os.WriteFile(composerPath, []byte(`{"name":"example/project"}`), 0o644); err != nil {
+		t.Fatalf("write composer.json: %v", err)
+	}
+
+	original := ideInstallCandidatesByKey
+	ideInstallCandidatesByKey = map[string][]string{
+		"phpstorm":  {filepath.Join(root, "missing", "PhpStorm.app")},
+		"jetbrains": {jetbrainsPath},
+	}
+	t.Cleanup(func() {
+		ideInstallCandidatesByKey = original
+	})
+
+	result := Registry()["phpstorm"].Detect(context.Background(), root)
+	expected := Result{Key: "phpstorm", Matched: true, Reason: "inferred from jetbrains install and composer.json", Evidence: jetbrainsPath}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestJetBrainsLanguageInferencePrefersGoLandForGoProjects(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "GoLand")
+	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+		t.Fatalf("mkdir jetbrains path: %v", err)
+	}
+	goModPath := filepath.Join(root, "go.mod")
+	if err := os.WriteFile(goModPath, []byte("module example.com/genignore\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	original := ideInstallCandidatesByKey
+	ideInstallCandidatesByKey = map[string][]string{
+		"goland":    {filepath.Join(root, "missing", "GoLand.app")},
+		"jetbrains": {jetbrainsPath},
+	}
+	t.Cleanup(func() {
+		ideInstallCandidatesByKey = original
+	})
+
+	result := Registry()["goland"].Detect(context.Background(), root)
+	expected := Result{Key: "goland", Matched: true, Reason: "inferred from jetbrains install and go.mod", Evidence: jetbrainsPath}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestJetBrainsLanguageInferenceDoesNotMatchWithoutLanguageSignal(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "IDEA-U")
+	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+		t.Fatalf("mkdir jetbrains path: %v", err)
+	}
+
+	original := ideInstallCandidatesByKey
+	ideInstallCandidatesByKey = map[string][]string{
+		"phpstorm":  {filepath.Join(root, "missing", "PhpStorm.app")},
+		"jetbrains": {jetbrainsPath},
+	}
+	t.Cleanup(func() {
+		ideInstallCandidatesByKey = original
+	})
+
+	result := Registry()["phpstorm"].Detect(context.Background(), root)
+	expected := Result{Key: "phpstorm", Matched: false, Reason: "application not found"}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
