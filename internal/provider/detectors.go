@@ -10,6 +10,65 @@ import (
 	"strings"
 )
 
+var ideInstallCandidatesByKey = map[string][]string{
+	"phpstorm": {
+		"/Applications/PhpStorm.app",
+		"/opt/phpstorm",
+		"/opt/PhpStorm",
+	},
+	"jetbrains": {
+		"/Applications/IntelliJ IDEA.app",
+		"/Applications/PhpStorm.app",
+		"/Applications/PyCharm.app",
+		"/Applications/WebStorm.app",
+		"/opt/jetbrains",
+		"/opt/JetBrains",
+		"/var/lib/flatpak/app/com.jetbrains.IntelliJ-IDEA-Community",
+		"/var/lib/flatpak/app/com.jetbrains.IntelliJ-IDEA-Ultimate",
+		"/var/lib/flatpak/app/com.jetbrains.PhpStorm",
+	},
+	"intellij": {
+		"/Applications/IntelliJ IDEA.app",
+		"/opt/intellij-idea",
+		"/opt/idea",
+	},
+	"pycharm": {
+		"/Applications/PyCharm.app",
+		"/opt/pycharm",
+		"/opt/PyCharm",
+	},
+	"webstorm": {
+		"/Applications/WebStorm.app",
+		"/opt/webstorm",
+		"/opt/WebStorm",
+	},
+	"goland": {
+		"/Applications/GoLand.app",
+		"/opt/goland",
+		"/opt/GoLand",
+	},
+	"rubymine": {
+		"/Applications/RubyMine.app",
+		"/opt/rubymine",
+		"/opt/RubyMine",
+	},
+	"rider": {
+		"/Applications/Rider.app",
+		"/opt/rider",
+		"/opt/Rider",
+	},
+	"clion": {
+		"/Applications/CLion.app",
+		"/opt/clion",
+		"/opt/CLion",
+	},
+	"appcode": {
+		"/Applications/AppCode.app",
+		"/opt/appcode",
+		"/opt/AppCode",
+	},
+}
+
 type DetectorFunc func(ctx context.Context, cwd string) Result
 
 func (f DetectorFunc) Detect(ctx context.Context, cwd string) Result {
@@ -31,17 +90,53 @@ func Registry() map[string]Detector {
 		"linux":            osDetector("linux", "linux"),
 		"windows":          osDetector("windows", "windows"),
 		"visualstudiocode": pathDetector("visualstudiocode", []string{"code"}, "found VS Code binary in PATH"),
-		"phpstorm":         appDetector("phpstorm", []string{"/Applications/PhpStorm.app"}),
-		"jetbrains":        appDetector("jetbrains", []string{"/Applications/IntelliJ IDEA.app", "/Applications/PhpStorm.app", "/Applications/PyCharm.app", "/Applications/WebStorm.app"}),
-		"intellij":         appDetector("intellij", []string{"/Applications/IntelliJ IDEA.app"}),
-		"pycharm":          appDetector("pycharm", []string{"/Applications/PyCharm.app"}),
-		"webstorm":         appDetector("webstorm", []string{"/Applications/WebStorm.app"}),
-		"goland":           appDetector("goland", []string{"/Applications/GoLand.app"}),
-		"rubymine":         appDetector("rubymine", []string{"/Applications/RubyMine.app"}),
-		"rider":            appDetector("rider", []string{"/Applications/Rider.app"}),
-		"clion":            appDetector("clion", []string{"/Applications/CLion.app"}),
-		"appcode":          appDetector("appcode", []string{"/Applications/AppCode.app"}),
+		"phpstorm":         ideWithJetBrainsLanguageInferenceDetector("phpstorm", "composer.json"),
+		"jetbrains":        ideDetector("jetbrains"),
+		"intellij":         ideDetector("intellij"),
+		"pycharm":          ideDetector("pycharm"),
+		"webstorm":         ideDetector("webstorm"),
+		"goland":           ideWithJetBrainsLanguageInferenceDetector("goland", "go.mod"),
+		"rubymine":         ideDetector("rubymine"),
+		"rider":            ideDetector("rider"),
+		"clion":            ideDetector("clion"),
+		"appcode":          ideDetector("appcode"),
 	}
+}
+
+func ideDetector(key string) Detector {
+	return appDetector(key, ideInstallCandidatesForKey(key))
+}
+
+func ideWithJetBrainsLanguageInferenceDetector(key, signalFile string) Detector {
+	base := ideDetector(key)
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		result := base.Detect(ctx, cwd)
+		if result.Matched || result.Reason != "application not found" {
+			return result
+		}
+
+		signalPath := filepath.Join(cwd, signalFile)
+		if _, err := os.Stat(signalPath); err != nil {
+			return result
+		}
+
+		jetbrains := ideDetector("jetbrains").Detect(ctx, cwd)
+		if !jetbrains.Matched {
+			return result
+		}
+
+		return Result{Key: key, Matched: true, Reason: "inferred from jetbrains install and " + signalFile, Evidence: jetbrains.Evidence}
+	})
+}
+
+func ideInstallCandidatesForKey(key string) []string {
+	candidates, ok := ideInstallCandidatesByKey[key]
+	if !ok {
+		return nil
+	}
+	copyOfCandidates := make([]string, len(candidates))
+	copy(copyOfCandidates, candidates)
+	return copyOfCandidates
 }
 
 func vueDetector() Detector {

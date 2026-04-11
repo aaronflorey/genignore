@@ -149,8 +149,6 @@ func TestVueAndReactDetectorsMatchOnlyRealPackageSignals(t *testing.T) {
 }
 
 func TestIDEDetectorsMatchConfiguredMacAndLinuxInstallCandidates(t *testing.T) {
-	t.Parallel()
-
 	for _, tc := range []struct {
 		name       string
 		installRel string
@@ -160,8 +158,6 @@ func TestIDEDetectorsMatchConfiguredMacAndLinuxInstallCandidates(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
 			root := t.TempDir()
 			installPath := filepath.Join(root, filepath.FromSlash(tc.installRel))
 			if err := os.MkdirAll(installPath, 0o755); err != nil {
@@ -186,8 +182,6 @@ func TestIDEDetectorsMatchConfiguredMacAndLinuxInstallCandidates(t *testing.T) {
 }
 
 func TestJetBrainsLanguageInferencePrefersPhpStormForPHPProjects(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "IDEA-U")
 	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
@@ -215,8 +209,6 @@ func TestJetBrainsLanguageInferencePrefersPhpStormForPHPProjects(t *testing.T) {
 }
 
 func TestJetBrainsLanguageInferencePrefersGoLandForGoProjects(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "GoLand")
 	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
@@ -244,8 +236,6 @@ func TestJetBrainsLanguageInferencePrefersGoLandForGoProjects(t *testing.T) {
 }
 
 func TestJetBrainsLanguageInferenceDoesNotMatchWithoutLanguageSignal(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "IDEA-U")
 	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
