@@ -41,6 +41,12 @@ type AddOptions struct {
 	Verbose bool
 }
 
+var detectCarryForwardOSProviders = map[string]struct{}{
+	"linux":   {},
+	"macos":   {},
+	"windows": {},
+}
+
 func NewService(cwd string) *Service {
 	return &Service{
 		CWD:       cwd,
@@ -76,8 +82,17 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 	include, includeWarnings := sanitizeKeys(opts.Include)
 	exclude, excludeWarnings := sanitizeKeys(opts.Exclude)
 	warnings := append(includeWarnings, excludeWarnings...)
+	existingManagedProviders, err := s.Manager.ReadManagedProviders()
+	if err != nil {
+		return CommandResult{}, err
+	}
 
 	final := makeSet(detectedProviders)
+	for _, key := range existingManagedProviders {
+		if shouldCarryForwardDetectedManagedProvider(key) {
+			final[key] = struct{}{}
+		}
+	}
 	for _, key := range include {
 		final[key] = struct{}{}
 	}
@@ -226,4 +241,9 @@ func mapKeysSorted(m map[string]struct{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func shouldCarryForwardDetectedManagedProvider(key string) bool {
+	_, ok := detectCarryForwardOSProviders[key]
+	return ok
 }
