@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 Phase: 5 of 5 (Reliability & Regression Safety)
 Plan: 2 of 2 in current phase
 Status: v1.0 milestone complete and archived
-Last activity: 2026-04-11 - Completed quick task 260411-989: please setup a workflow for testing the code and linting on each commit/pr
+Last activity: 2026-04-11 - Completed quick task 260411-anz: if you detect that macos, linux or windows, was already in the genignore block when overwriting, then include those. eg. if i run genignore on mac, and then someone else runs it on linux, currently it would remove mac, but we should keep it.
 
 Progress: [██████████] 100%
 
@@ -81,6 +81,7 @@ None currently.
 | 260408-eul | check the local .gitignore and add some code to clean up the toptal output so it doesn't have unneeded comments | 2026-04-08 | c558322 | [260408-eul-check-the-local-gitignore-and-add-some-c](./quick/260408-eul-check-the-local-gitignore-and-add-some-c/) |
 | 260411-47x | dedupe unmanaged .gitignore lines that safely match generated managed rules | 2026-04-11 | bb00825 | [260411-47x-before-writing-the-generated-gitignore-c](./quick/260411-47x-before-writing-the-generated-gitignore-c/) |
 | 260411-989 | please setup a workflow for testing the code and linting on each commit/pr | 2026-04-11 | 8cd813b | [260411-989-please-setup-a-workflow-for-testing-the-](./quick/260411-989-please-setup-a-workflow-for-testing-the-/) |
+| 260411-anz | if you detect that macos, linux or windows, was already in the genignore block when overwriting, then include those. eg. if i run genignore on mac, and then someone else runs it on linux, currently it would remove mac, but we should keep it. | 2026-04-11 | 9a8770b | [260411-anz-if-you-detect-that-macos-linux-or-window](./quick/260411-anz-if-you-detect-that-macos-linux-or-window/) |
 
 ## Session Continuity
 
