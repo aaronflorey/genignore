@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed quick task 260411-47x
-last_updated: "2026-04-11T03:08:52Z"
+stopped_at: Completed quick task 260411-989
+last_updated: "2026-04-11T06:46:31Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 Phase: 5 of 5 (Reliability & Regression Safety)
 Plan: 2 of 2 in current phase
 Status: v1.0 milestone complete and archived
-Last activity: 2026-04-11 - Completed quick task 260411-47x: dedupe unmanaged .gitignore lines that safely match generated managed rules
+Last activity: 2026-04-11 - Completed quick task 260411-989: please setup a workflow for testing the code and linting on each commit/pr
 
 Progress: [██████████] 100%
 
@@ -80,9 +80,10 @@ None currently.
 |---|-------------|------|--------|-----------|
 | 260408-eul | check the local .gitignore and add some code to clean up the toptal output so it doesn't have unneeded comments | 2026-04-08 | c558322 | [260408-eul-check-the-local-gitignore-and-add-some-c](./quick/260408-eul-check-the-local-gitignore-and-add-some-c/) |
 | 260411-47x | dedupe unmanaged .gitignore lines that safely match generated managed rules | 2026-04-11 | bb00825 | [260411-47x-before-writing-the-generated-gitignore-c](./quick/260411-47x-before-writing-the-generated-gitignore-c/) |
+| 260411-989 | please setup a workflow for testing the code and linting on each commit/pr | 2026-04-11 | 8cd813b | [260411-989-please-setup-a-workflow-for-testing-the-](./quick/260411-989-please-setup-a-workflow-for-testing-the-/) |
 
 ## Session Continuity
 
-Last session: 2026-04-11 03:08
-Stopped at: Completed quick task 260411-47x
-Resume file: .planning/quick/260411-47x-before-writing-the-generated-gitignore-c/260411-47x-SUMMARY.md
+Last session: 2026-04-11 06:46
+Stopped at: Completed quick task 260411-989
+Resume file: .planning/quick/260411-989-please-setup-a-workflow-for-testing-the-/260411-989-SUMMARY.md

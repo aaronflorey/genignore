@@ -1,17 +1,55 @@
 {
+  "mode": "interactive",
+  "granularity": "standard",
   "model_profile": "balanced",
+  "resolve_model_ids": "omit",
   "commit_docs": true,
+  "response_language": "en",
+  "git": {
+    "branching_strategy": "phase",
+    "phase_branch_template": "gsd/phase-{phase}-{slug}",
+    "milestone_branch_template": "gsd/{milestone}-{slug}",
+    "quick_branch_template": null
+  },
+  "agent_skills": {
+    "gsd-planner": [
+      "skills/gsd-commit-enforcer"
+    ],
+    "gsd-executor": [
+      "skills/gsd-commit-enforcer"
+    ]
+  },
+  "model_overrides": {
+    "gsd-advisor-researcher": "o4-mini",
+    "gsd-assumptions-analyzer": "o4-mini",
+    "gsd-code-reviewer": "o4-mini",
+    "gsd-code-fixer": "gpt-5.3-codex",
+    "gsd-codebase-mapper": "gpt-5.3-codex",
+    "gsd-debugger": "gpt-5.3-codex",
+    "gsd-doc-verifier": "o4-mini",
+    "gsd-doc-writer": "gpt-5.3-codex",
+    "gsd-executor": "gpt-5.3-codex",
+    "gsd-integration-checker": "o4-mini",
+    "gsd-intel-updater": "gpt-5.3-codex",
+    "gsd-nyquist-auditor": "o4-mini",
+    "gsd-phase-researcher": "o4-mini",
+    "gsd-plan-checker": "o4-mini",
+    "gsd-planner": "gpt-5.3-codex",
+    "gsd-project-researcher": "o4-mini",
+    "gsd-research-synthesizer": "o4-mini",
+    "gsd-roadmapper": "gpt-5.3-codex",
+    "gsd-security-auditor": "o4-mini",
+    "gsd-ui-auditor": "o4-mini",
+    "gsd-ui-checker": "o4-mini",
+    "gsd-ui-researcher": "gpt-5.3-codex",
+    "gsd-user-profiler": "o4-mini",
+    "gsd-verifier": "o4-mini"
+  },
   "parallelization": true,
   "search_gitignored": false,
   "brave_search": false,
   "firecrawl": false,
   "exa_search": false,
-  "git": {
-    "branching_strategy": "none",
-    "phase_branch_template": "gsd/phase-{phase}-{slug}",
-    "milestone_branch_template": "gsd/{milestone}-{slug}",
-    "quick_branch_template": null
-  },
   "workflow": {
     "research": true,
     "plan_check": true,
@@ -33,15 +71,5 @@
     "context_warnings": true
   },
   "project_code": null,
-  "phase_naming": "sequential",
-  "agent_skills": {},
-  "resolve_model_ids": "omit",
-  "model_overrides": {
-    "gsd-planner": "gpt-5.4",
-    "gsd-executor": "gpt-5.3-codex",
-    "gsd-debugger": "gpt-5.3-codex",
-    "gsd-codebase-mapper": "gpt-5.4"
-  },
-  "mode": "yolo",
-  "granularity": "coarse"
+  "phase_naming": "sequential"
 }
