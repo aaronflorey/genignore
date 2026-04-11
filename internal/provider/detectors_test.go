@@ -438,3 +438,117 @@ func TestRegistryIncludesAutoDetectableSupportedJetBrainsIDEs(t *testing.T) {
 		}
 	}
 }
+
+func TestRequestedLanguageDetectorsMatchCommonProjectSignals(t *testing.T) {
+	t.Parallel()
+
+	registry := Registry()
+
+	for _, tc := range []struct {
+		name       string
+		key        string
+		relPath    string
+		content    string
+		expectOnly bool
+	}{
+		{name: "terraform from tf file", key: "terraform", relPath: "main.tf", content: "terraform {}\n"},
+		{name: "rust from cargo file", key: "rust", relPath: "Cargo.toml", content: "[package]\nname = \"demo\"\n"},
+		{name: "java from gradle file", key: "java", relPath: "build.gradle", content: "plugins { id 'java' }\n"},
+		{name: "kotlin from kt source", key: "kotlin", relPath: "main.kt", content: "fun main() {}\n"},
+		{name: "dotnetcore from solution", key: "dotnetcore", relPath: "Demo.sln", content: "\n"},
+		{name: "csharp from cs source", key: "csharp", relPath: "Program.cs", content: "class Program {}\n"},
+		{name: "dart from pubspec", key: "dart", relPath: "pubspec.yaml", content: "name: demo\n"},
+		{name: "swift from package file", key: "swift", relPath: "Package.swift", content: "// swift-tools-version:5.10\n"},
+		{name: "xcode from xcodeproj", key: "xcode", relPath: "Demo.xcodeproj", expectOnly: true},
+		{name: "android from nested manifest", key: "android", relPath: filepath.Join("app", "src", "main", "AndroidManifest.xml"), content: "<manifest/>\n"},
+		{name: "ruby from gemfile", key: "ruby", relPath: "Gemfile", content: "source 'https://rubygems.org'\n"},
+		{name: "maven from pom", key: "maven", relPath: "pom.xml", content: "<project/>\n"},
+		{name: "rails from config application", key: "rails", relPath: filepath.Join("config", "application.rb"), content: "module Demo\nend\n"},
+		{name: "jekyll from config", key: "jekyll", relPath: "_config.yml", content: "title: demo\n"},
+		{name: "symfony from lock", key: "symfony", relPath: "symfony.lock", content: "{}\n"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tc.relPath)
+			if tc.expectOnly {
+				if err := os.MkdirAll(path, 0o755); err != nil {
+					t.Fatalf("mkdir signal path: %v", err)
+				}
+			} else {
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatalf("mkdir signal parent: %v", err)
+				}
+				if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
+					t.Fatalf("write signal file: %v", err)
+				}
+			}
+
+			detector, ok := registry[tc.key]
+			if !ok {
+				t.Fatalf("missing detector for %q", tc.key)
+			}
+
+			result := detector.Detect(context.Background(), dir)
+			if !result.Matched || result.Key != tc.key {
+				t.Fatalf("expected matched result for %q, got %+v", tc.key, result)
+			}
+		})
+	}
+}
+
+func TestFlutterDetectorRequiresFlutterSignalInPubspec(t *testing.T) {
+	t.Parallel()
+
+	registry := Registry()
+	detector, ok := registry["flutter"]
+	if !ok {
+		t.Fatalf("missing detector for flutter")
+	}
+
+	t.Run("matches when flutter is declared", func(t *testing.T) {
+		dir := t.TempDir()
+		pubspec := filepath.Join(dir, "pubspec.yaml")
+		if err := os.WriteFile(pubspec, []byte("name: demo\nflutter:\n  uses-material-design: true\n"), 0o644); err != nil {
+			t.Fatalf("write pubspec: %v", err)
+		}
+
+		result := detector.Detect(context.Background(), dir)
+		expected := Result{Key: "flutter", Matched: true, Reason: "pubspec.yaml references flutter", Evidence: pubspec}
+		if result != expected {
+			t.Fatalf("unexpected flutter match result: %+v", result)
+		}
+	})
+
+	t.Run("does not match plain dart pubspec", func(t *testing.T) {
+		dir := t.TempDir()
+		pubspec := filepath.Join(dir, "pubspec.yaml")
+		if err := os.WriteFile(pubspec, []byte("name: demo\nenvironment:\n  sdk: ^3.0.0\n"), 0o644); err != nil {
+			t.Fatalf("write pubspec: %v", err)
+		}
+
+		result := detector.Detect(context.Background(), dir)
+		expected := Result{Key: "flutter", Matched: false, Reason: "signal not found"}
+		if result != expected {
+			t.Fatalf("unexpected flutter miss result: %+v", result)
+		}
+	})
+}
+
+func TestRegistryIncludesRequestedLanguageDetectors(t *testing.T) {
+	t.Parallel()
+
+	registry := Registry()
+	for _, key := range []string{"terraform", "rust", "java", "kotlin", "dotnetcore", "csharp", "dart", "flutter", "swift", "xcode", "android", "ruby", "maven", "rails", "jekyll", "symfony"} {
+		if !IsSupported(key) {
+			t.Fatalf("expected %q to be supported", key)
+		}
+		detector, ok := registry[key]
+		if !ok {
+			t.Fatalf("expected registry detector for %q", key)
+		}
+		if detector == nil {
+			t.Fatalf("detector for %q is nil", key)
+		}
+	}
+}
