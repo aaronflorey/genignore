@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/aaronflorey/genignore/compare/v1.0.0...v1.0.1) (2026-04-11)
+
+
+### Fixes
+
+* **260411-anz:** preserve managed OS providers during detect ([9a8770b](https://github.com/aaronflorey/genignore/commit/9a8770b46ebf8819522a3a41898fc0a3e201507a))
+
 ## [1.0.0](https://github.com/aaronflorey/genignore/compare/v1.0.0...v1.0.0) (2026-04-11)
 
 
