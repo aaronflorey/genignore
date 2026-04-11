@@ -13,10 +13,10 @@
   },
   "agent_skills": {
     "gsd-planner": [
-      "skills/gsd-commit-enforcer"
+      ".skills/gsd-commit-enforcer"
     ],
     "gsd-executor": [
-      "skills/gsd-commit-enforcer"
+      ".skills/gsd-commit-enforcer"
     ]
   },
   "model_overrides": {
