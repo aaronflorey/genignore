@@ -65,11 +65,11 @@ func detectorResult(result provider.Result) provider.Detector {
 	})
 }
 
-func TestDetectResetsManagedSet(t *testing.T) {
+func TestDetectPreservesManagedOSProvidersAcrossCrossRuntimeRuns(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	manager := gitignore.NewManager(dir)
-	seed := gitignore.BuildManagedBlock([]string{"python"}, "venv/")
+	seed := gitignore.BuildManagedBlock([]string{"macos"}, ".DS_Store\n")
 	if _, err := manager.UpsertManagedBlock(seed, false); err != nil {
 		t.Fatalf("seed failed: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestDetectResetsManagedSet(t *testing.T) {
 		Client:  client,
 		Manager: manager,
 		Detectors: map[string]provider.Detector{
-			"node": matchedDetector("node"),
+			"linux": matchedDetector("linux"),
 		},
 	}
 
@@ -88,8 +88,82 @@ func TestDetectResetsManagedSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
 	}
-	if !reflect.DeepEqual(res.FinalProviders, []string{"node"}) {
-		t.Fatalf("expected detect reset to node only, got %v", res.FinalProviders)
+	if !reflect.DeepEqual(res.FinalProviders, []string{"linux", "macos"}) {
+		t.Fatalf("expected detect to preserve managed OS provider, got %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("expected one template request, got %d", len(client.requests))
+	}
+	if !reflect.DeepEqual(client.requests[0], []string{"linux", "macos"}) {
+		t.Fatalf("expected sorted template request providers, got %v", client.requests[0])
+	}
+}
+
+func TestDetectResetDropsManagedNonOSProviders(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	manager := gitignore.NewManager(dir)
+	seed := gitignore.BuildManagedBlock([]string{"python"}, "venv/\n")
+	if _, err := manager.UpsertManagedBlock(seed, false); err != nil {
+		t.Fatalf("seed failed: %v", err)
+	}
+
+	client := &fakeAPI{available: provider.SupportedKeys, template: "node_modules/\n"}
+	svc := &Service{
+		CWD:     dir,
+		Client:  client,
+		Manager: manager,
+		Detectors: map[string]provider.Detector{
+			"linux": matchedDetector("linux"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"linux"}) {
+		t.Fatalf("expected detect reset to drop non-OS managed providers, got %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("expected one template request, got %d", len(client.requests))
+	}
+	if !reflect.DeepEqual(client.requests[0], []string{"linux"}) {
+		t.Fatalf("expected sorted template request providers, got %v", client.requests[0])
+	}
+}
+
+func TestDetectExcludeRemovesPreservedManagedOSProvider(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	manager := gitignore.NewManager(dir)
+	seed := gitignore.BuildManagedBlock([]string{"macos"}, ".DS_Store\n")
+	if _, err := manager.UpsertManagedBlock(seed, false); err != nil {
+		t.Fatalf("seed failed: %v", err)
+	}
+
+	client := &fakeAPI{available: provider.SupportedKeys, template: "node_modules/\n"}
+	svc := &Service{
+		CWD:     dir,
+		Client:  client,
+		Manager: manager,
+		Detectors: map[string]provider.Detector{
+			"linux": matchedDetector("linux"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{Exclude: []string{"macos"}})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"linux"}) {
+		t.Fatalf("expected exclude to remove preserved OS provider, got %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("expected one template request, got %d", len(client.requests))
+	}
+	if !reflect.DeepEqual(client.requests[0], []string{"linux"}) {
+		t.Fatalf("expected sorted template request providers, got %v", client.requests[0])
 	}
 }
 
