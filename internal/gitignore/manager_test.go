@@ -283,3 +283,145 @@ func TestUpsertDryRunLeavesExistingFileByteExact(t *testing.T) {
 		t.Fatalf("expected dry-run to preserve file exactly")
 	}
 }
+
+func TestUpsertDedupRemovesExactDuplicateUnmanagedRule(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		".DS_Store",
+		"*.log",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed file failed: %v", err)
+	}
+
+	m := NewManager(dir)
+	block := BuildManagedBlock([]string{"macos"}, ".DS_Store\n")
+	if _, err := m.UpsertManagedBlock(block, false); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+
+	if strings.Count(value, ".DS_Store") != 1 {
+		t.Fatalf("expected duplicate unmanaged .DS_Store to be removed\n%s", value)
+	}
+	if !strings.Contains(value, "*.log") {
+		t.Fatalf("expected non-duplicate unmanaged rules to remain\n%s", value)
+	}
+}
+
+func TestUpsertDedupRemovesSafeEquivalentLeadingSlashForm(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"/.DS_Store",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed file failed: %v", err)
+	}
+
+	m := NewManager(dir)
+	block := BuildManagedBlock([]string{"macos"}, ".DS_Store\n")
+	if _, err := m.UpsertManagedBlock(block, false); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+
+	if strings.Contains(value, "\n/.DS_Store\n") {
+		t.Fatalf("expected unmanaged /.DS_Store to be deduped against managed .DS_Store\n%s", value)
+	}
+	if strings.Count(value, ".DS_Store") != 1 {
+		t.Fatalf("expected only managed .DS_Store to remain\n%s", value)
+	}
+}
+
+func TestUpsertDedupPreservesCommentsAndBlankLines(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"# Keep this comment",
+		"",
+		".DS_Store",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed file failed: %v", err)
+	}
+
+	m := NewManager(dir)
+	block := BuildManagedBlock([]string{"macos"}, strings.Join([]string{
+		"# managed comment",
+		".DS_Store",
+		"",
+	}, "\n"))
+	if _, err := m.UpsertManagedBlock(block, false); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+
+	if !strings.Contains(value, "# Keep this comment") {
+		t.Fatalf("expected unmanaged comment to be preserved\n%s", value)
+	}
+	if strings.Contains(value, "\n.DS_Store\n\n") {
+		t.Fatalf("expected unmanaged duplicate .DS_Store to be removed\n%s", value)
+	}
+	if strings.Contains(value, "\n# managed comment\n# Keep this comment\n") {
+		t.Fatalf("expected unmanaged comment not to be deduped using managed comment lines\n%s", value)
+	}
+}
+
+func TestUpsertDedupPreservesAmbiguousSemanticDifference(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"storage",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed file failed: %v", err)
+	}
+
+	m := NewManager(dir)
+	block := BuildManagedBlock([]string{"generic"}, "storage/\n")
+	if _, err := m.UpsertManagedBlock(block, false); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+
+	if !strings.Contains(value, "\nstorage\n") {
+		t.Fatalf("expected unmanaged storage rule to remain because storage/ is not always equivalent\n%s", value)
+	}
+	if !strings.Contains(value, "\nstorage/\n") {
+		t.Fatalf("expected managed storage/ rule to remain\n%s", value)
+	}
+}
