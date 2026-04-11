@@ -257,3 +257,184 @@ func TestJetBrainsLanguageInferenceDoesNotMatchWithoutLanguageSignal(t *testing.
 		t.Fatalf("unexpected result: %+v", result)
 	}
 }
+
+func TestJetBrainsLanguageInferencePrefersPyCharmForPythonProjects(t *testing.T) {
+	root := t.TempDir()
+	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "PyCharm")
+	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+		t.Fatalf("mkdir jetbrains path: %v", err)
+	}
+	pyProjectPath := filepath.Join(root, "pyproject.toml")
+	if err := os.WriteFile(pyProjectPath, []byte("[project]\nname='demo'\n"), 0o644); err != nil {
+		t.Fatalf("write pyproject.toml: %v", err)
+	}
+
+	original := ideInstallCandidatesByKey
+	ideInstallCandidatesByKey = map[string][]string{
+		"pycharm":   {filepath.Join(root, "missing", "PyCharm.app")},
+		"jetbrains": {jetbrainsPath},
+	}
+	t.Cleanup(func() {
+		ideInstallCandidatesByKey = original
+	})
+
+	result := Registry()["pycharm"].Detect(context.Background(), root)
+	expected := Result{Key: "pycharm", Matched: true, Reason: "inferred from jetbrains install and pyproject.toml", Evidence: jetbrainsPath}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestJetBrainsLanguageInferencePrefersWebStormForJavaScriptProjects(t *testing.T) {
+	root := t.TempDir()
+	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "WebStorm")
+	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+		t.Fatalf("mkdir jetbrains path: %v", err)
+	}
+	packageJSONPath := filepath.Join(root, "package.json")
+	if err := os.WriteFile(packageJSONPath, []byte(`{"name":"demo"}`), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+
+	original := ideInstallCandidatesByKey
+	ideInstallCandidatesByKey = map[string][]string{
+		"webstorm":  {filepath.Join(root, "missing", "WebStorm.app")},
+		"jetbrains": {jetbrainsPath},
+	}
+	t.Cleanup(func() {
+		ideInstallCandidatesByKey = original
+	})
+
+	result := Registry()["webstorm"].Detect(context.Background(), root)
+	expected := Result{Key: "webstorm", Matched: true, Reason: "inferred from jetbrains install and package.json", Evidence: jetbrainsPath}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestJetBrainsLanguageInferencePrefersLanguageSpecificIDEs(t *testing.T) {
+	t.Run("Ruby infers RubyMine", func(t *testing.T) {
+		root := t.TempDir()
+		jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "RubyMine")
+		if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+			t.Fatalf("mkdir jetbrains path: %v", err)
+		}
+		signalPath := filepath.Join(root, "Gemfile")
+		if err := os.WriteFile(signalPath, []byte("source 'https://rubygems.org'\n"), 0o644); err != nil {
+			t.Fatalf("write Gemfile: %v", err)
+		}
+
+		original := ideInstallCandidatesByKey
+		ideInstallCandidatesByKey = map[string][]string{
+			"rubymine":  {filepath.Join(root, "missing", "RubyMine.app")},
+			"jetbrains": {jetbrainsPath},
+		}
+		t.Cleanup(func() {
+			ideInstallCandidatesByKey = original
+		})
+
+		result := Registry()["rubymine"].Detect(context.Background(), root)
+		expected := Result{Key: "rubymine", Matched: true, Reason: "inferred from jetbrains install and Gemfile", Evidence: jetbrainsPath}
+		if result != expected {
+			t.Fatalf("unexpected result: %+v", result)
+		}
+	})
+
+	t.Run("DotNet infers Rider", func(t *testing.T) {
+		root := t.TempDir()
+		jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "Rider")
+		if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+			t.Fatalf("mkdir jetbrains path: %v", err)
+		}
+		signalPath := filepath.Join(root, "Demo.sln")
+		if err := os.WriteFile(signalPath, []byte("\n"), 0o644); err != nil {
+			t.Fatalf("write solution file: %v", err)
+		}
+
+		original := ideInstallCandidatesByKey
+		ideInstallCandidatesByKey = map[string][]string{
+			"rider":     {filepath.Join(root, "missing", "Rider.app")},
+			"jetbrains": {jetbrainsPath},
+		}
+		t.Cleanup(func() {
+			ideInstallCandidatesByKey = original
+		})
+
+		result := Registry()["rider"].Detect(context.Background(), root)
+		expected := Result{Key: "rider", Matched: true, Reason: "inferred from jetbrains install and .sln/.csproj", Evidence: jetbrainsPath}
+		if result != expected {
+			t.Fatalf("unexpected result: %+v", result)
+		}
+	})
+
+	t.Run("C and C++ infers CLion", func(t *testing.T) {
+		root := t.TempDir()
+		jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "CLion")
+		if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+			t.Fatalf("mkdir jetbrains path: %v", err)
+		}
+		signalPath := filepath.Join(root, "CMakeLists.txt")
+		if err := os.WriteFile(signalPath, []byte("cmake_minimum_required(VERSION 3.20)\n"), 0o644); err != nil {
+			t.Fatalf("write CMakeLists.txt: %v", err)
+		}
+
+		original := ideInstallCandidatesByKey
+		ideInstallCandidatesByKey = map[string][]string{
+			"clion":     {filepath.Join(root, "missing", "CLion.app")},
+			"jetbrains": {jetbrainsPath},
+		}
+		t.Cleanup(func() {
+			ideInstallCandidatesByKey = original
+		})
+
+		result := Registry()["clion"].Detect(context.Background(), root)
+		expected := Result{Key: "clion", Matched: true, Reason: "inferred from jetbrains install and CMakeLists.txt", Evidence: jetbrainsPath}
+		if result != expected {
+			t.Fatalf("unexpected result: %+v", result)
+		}
+	})
+}
+
+func TestJetBrainsLanguageInferenceDoesNotMatchWithoutMatchingSignalForNewIDEPaths(t *testing.T) {
+	root := t.TempDir()
+	jetbrainsPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "WebStorm")
+	if err := os.MkdirAll(jetbrainsPath, 0o755); err != nil {
+		t.Fatalf("mkdir jetbrains path: %v", err)
+	}
+
+	original := ideInstallCandidatesByKey
+	ideInstallCandidatesByKey = map[string][]string{
+		"webstorm":  {filepath.Join(root, "missing", "WebStorm.app")},
+		"jetbrains": {jetbrainsPath},
+	}
+	t.Cleanup(func() {
+		ideInstallCandidatesByKey = original
+	})
+
+	result := Registry()["webstorm"].Detect(context.Background(), root)
+	expected := Result{Key: "webstorm", Matched: false, Reason: "application not found"}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestRegistryIncludesAutoDetectableSupportedJetBrainsIDEs(t *testing.T) {
+	t.Parallel()
+
+	registry := Registry()
+	for _, key := range []string{"androidstudio", "appcode", "clion", "goland", "intellij", "jetbrains", "phpstorm", "pycharm", "rider", "rubymine", "webstorm"} {
+		if !IsSupported(key) {
+			t.Fatalf("expected %q to be supported", key)
+		}
+		detector, ok := registry[key]
+		if !ok {
+			t.Fatalf("expected registry detector for %q", key)
+		}
+		if detector == nil {
+			t.Fatalf("detector for %q is nil", key)
+		}
+		if len(ideInstallCandidatesForKey(key)) == 0 {
+			t.Fatalf("expected non-empty install candidates for %q", key)
+		}
+	}
+}
