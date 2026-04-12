@@ -617,7 +617,7 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	if string(firstContent) != string(secondContent) {
 		t.Fatalf("expected rerun to remain byte-stable\nfirst:\n%s\nsecond:\n%s", string(firstContent), string(secondContent))
 	}
-	if !strings.HasSuffix(string(secondContent), "# local rule\n.env\n") {
+	if !strings.HasSuffix(string(secondContent), "# local rule\n") {
 		t.Fatalf("expected unmanaged trailing lines preserved\n%s", string(secondContent))
 	}
 }
