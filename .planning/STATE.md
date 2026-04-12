@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed quick task 260412-3md
-last_updated: "2026-04-12T02:44:00Z"
+stopped_at: Completed quick task 260412-4v6
+last_updated: "2026-04-12T03:34:28Z"
 last_activity: 2026-04-12
 progress:
   total_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 Phase: 5 of 5 (Reliability & Regression Safety)
 Plan: 2 of 2 in current phase
 Status: v1.0 milestone complete and archived
-Last activity: 2026-04-12 - Completed quick task 260412-3md: ensure `.env` and `.env.*` are always ignored with deterministic env-rule reconciliation and explicit safe exceptions.
+Last activity: 2026-04-12 - Completed quick task 260412-4v6: fix stale env suffix assertions in service tests to match normalized env-rule output.
 
 Progress: [██████████] 100%
 
@@ -86,9 +86,10 @@ None currently.
 | 260411-dww | expand JetBrains language-aware IDE detection to infer pycharm/webstorm/rubymine/rider/clion and include all supported JetBrains IDE keys in detector auto-detection coverage | 2026-04-11 | 1884acd |  | [260411-dww-expand-jetbrains-language-aware-ide-dete](./quick/260411-dww-expand-jetbrains-language-aware-ide-dete/) |
 | 260411-wji | add support for terraform, rust, java, kotlin, dotnetcore, csharp, dart, flutter, swift, xcode, android, ruby, maven, rails, jekyll, symfony | 2026-04-11 | 9b2499a | Verified | [260411-wji-add-support-for-terraform-rust-java-kotl](./quick/260411-wji-add-support-for-terraform-rust-java-kotl/) |
 | 260412-3md | ensure env and env variants are always ignored while preserving explicit safe exceptions and deterministic reconciliation | 2026-04-12 | 4f99b55 |  | [260412-3md-ensure-env-and-env-variants-are-always-i](./quick/260412-3md-ensure-env-and-env-variants-are-always-i/) |
+| 260412-4v6 | fix CI stale env suffix assertions to match normalized env-rule output and deterministic ordering | 2026-04-12 | b68fd41 |  | [260412-4v6-fix-ci-failure-by-updating-stale-env-suf](./quick/260412-4v6-fix-ci-failure-by-updating-stale-env-suf/) |
 
 ## Session Continuity
 
-Last session: 2026-04-12 02:44
-Stopped at: Completed quick task 260412-3md
-Resume file: .planning/quick/260412-3md-ensure-env-and-env-variants-are-always-i/260412-3md-SUMMARY.md
+Last session: 2026-04-12 03:34
+Stopped at: Completed quick task 260412-4v6
+Resume file: .planning/quick/260412-4v6-fix-ci-failure-by-updating-stale-env-suf/260412-4v6-SUMMARY.md
