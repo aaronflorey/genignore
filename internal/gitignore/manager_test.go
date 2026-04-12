@@ -385,7 +385,7 @@ func TestUpsertDedupPreservesCommentsAndBlankLines(t *testing.T) {
 	if !strings.Contains(value, "# Keep this comment") {
 		t.Fatalf("expected unmanaged comment to be preserved\n%s", value)
 	}
-	if strings.Contains(value, "\n.DS_Store\n\n") {
+	if countExactLine(value, ".DS_Store") != 1 {
 		t.Fatalf("expected unmanaged duplicate .DS_Store to be removed\n%s", value)
 	}
 	if strings.Contains(value, "\n# managed comment\n# Keep this comment\n") {
