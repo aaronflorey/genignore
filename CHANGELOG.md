@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.0](https://github.com/aaronflorey/genignore/compare/v1.0.1...v1.1.0) (2026-04-12)
+
+
+### Features
+
+* **260411-dnn:** add cross-platform IDE and JetBrains inference detection ([ded7ac1](https://github.com/aaronflorey/genignore/commit/ded7ac13cfb4af128655cd2270df8a705a8b0d01))
+* **260411-dww:** expand JetBrains language-aware IDE detection ([09bed7b](https://github.com/aaronflorey/genignore/commit/09bed7b71be71885f67702f841d89bbc6ca40fa2))
+* **provider:** Add detectors for mainstream templates ([9b2499a](https://github.com/aaronflorey/genignore/commit/9b2499a7c77d1ad55de5cd964b4864bc4deed923))
+
 ## [1.0.1](https://github.com/aaronflorey/genignore/compare/v1.0.0...v1.0.1) (2026-04-11)
 
 
