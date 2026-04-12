@@ -85,6 +85,22 @@ func Registry() map[string]Detector {
 		"composer":         fileExistsDetector("composer", "composer.json", "found composer.json"),
 		"node":             fileExistsDetector("node", "package.json", "found package.json"),
 		"go":               fileExistsDetector("go", "go.mod", "found go.mod"),
+		"terraform":        anyGlobDetector("terraform", "found terraform file", "*.tf", "*.tfvars", ".terraform.lock.hcl"),
+		"rust":             fileExistsDetector("rust", "Cargo.toml", "found Cargo.toml"),
+		"java":             anyFileDetector("java", []string{"pom.xml", "build.gradle", "build.gradle.kts"}, "found java project file"),
+		"kotlin":           anySignalDetector("kotlin", signalDetector{reason: "found kotlin project file", match: anySignalMatch(anyFileSignal("build.gradle.kts", "settings.gradle.kts"), anyGlobSignal("found kotlin source file", "*.kt"))}),
+		"dotnetcore":       anyGlobDetector("dotnetcore", "found dotnet project file", "*.sln", "*.csproj"),
+		"csharp":           anySignalDetector("csharp", signalDetector{reason: "found csharp project file", match: anySignalMatch(anyGlobSignal("found csharp solution/project file", "*.sln", "*.csproj"), anyGlobSignal("found csharp source file", "*.cs"))}),
+		"dart":             fileExistsDetector("dart", "pubspec.yaml", "found pubspec.yaml"),
+		"flutter":          flutterDetector(),
+		"swift":            anySignalDetector("swift", signalDetector{reason: "found swift project file", match: anySignalMatch(fileSignal("Package.swift"), anyGlobSignal("found swift source file", "*.swift"))}),
+		"xcode":            anyGlobDetector("xcode", "found xcode project file", "*.xcodeproj", "*.xcworkspace"),
+		"android":          anyFileDetector("android", []string{"AndroidManifest.xml", filepath.Join("app", "src", "main", "AndroidManifest.xml")}, "found android manifest"),
+		"ruby":             fileExistsDetector("ruby", "Gemfile", "found Gemfile"),
+		"maven":            fileExistsDetector("maven", "pom.xml", "found pom.xml"),
+		"rails":            anyFileDetector("rails", []string{filepath.Join("bin", "rails"), filepath.Join("config", "application.rb")}, "found rails project file"),
+		"jekyll":           fileExistsDetector("jekyll", "_config.yml", "found _config.yml"),
+		"symfony":          anyFileDetector("symfony", []string{filepath.Join("bin", "console"), filepath.Join("config", "bundles.php"), "symfony.lock"}, "found symfony project file"),
 		"laravel":          laravelDetector(),
 		"nextjs":           anyFileDetector("nextjs", []string{"next.config.js", "next.config.mjs", "next.config.ts"}, "found next config"),
 		"nuxtjs":           anyFileDetector("nuxtjs", []string{"nuxt.config.js", "nuxt.config.mjs", "nuxt.config.ts"}, "found nuxt config"),
@@ -183,6 +199,34 @@ func anyGlobSignal(reason string, patterns ...string) func(cwd string) (string, 
 		}
 		return "", false
 	}
+}
+
+func anySignalMatch(signals ...func(cwd string) (string, bool)) func(cwd string) (string, bool) {
+	return func(cwd string) (string, bool) {
+		for _, signal := range signals {
+			if matched, ok := signal(cwd); ok {
+				return matched, true
+			}
+		}
+		return "", false
+	}
+}
+
+func anySignalDetector(key string, signal signalDetector) Detector {
+	return DetectorFunc(func(_ context.Context, cwd string) Result {
+		if matched, ok := signal.match(cwd); ok {
+			reason := signal.reason
+			if matched != "" {
+				reason = matched
+			}
+			return Result{Key: key, Matched: true, Reason: reason, Evidence: cwd}
+		}
+		return Result{Key: key, Matched: false, Reason: "signal not found"}
+	})
+}
+
+func anyGlobDetector(key, reason string, patterns ...string) Detector {
+	return anySignalDetector(key, signalDetector{reason: reason, match: anyGlobSignal(reason, patterns...)})
 }
 
 func ideInstallCandidatesForKey(key string) []string {
@@ -295,6 +339,20 @@ func reactDetector() Detector {
 			return Result{Key: "react", Matched: true, Reason: "package.json devDependency includes react", Evidence: packagePath}
 		}
 		return Result{Key: "react", Matched: false, Reason: "signal not found"}
+	})
+}
+
+func flutterDetector() Detector {
+	return DetectorFunc(func(_ context.Context, cwd string) Result {
+		pubspecPath := filepath.Join(cwd, "pubspec.yaml")
+		content, result, ok := readSignalFile("flutter", pubspecPath)
+		if !ok {
+			return result
+		}
+		if strings.Contains(string(content), "flutter:") || strings.Contains(string(content), "sdk: flutter") {
+			return Result{Key: "flutter", Matched: true, Reason: "pubspec.yaml references flutter", Evidence: pubspecPath}
+		}
+		return Result{Key: "flutter", Matched: false, Reason: "signal not found"}
 	})
 }
 
