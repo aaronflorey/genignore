@@ -614,6 +614,12 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	if strings.Contains(string(secondContent), "# End of https://www.toptal.com/developers/gitignore/api/go,macos") {
 		t.Fatalf("expected add output to strip Toptal footer comment\n%s", string(secondContent))
 	}
+	if !strings.Contains(string(secondContent), ".env\n.env.*\n!.env.example\n!.env.ci\n# END genignore\n") {
+		t.Fatalf("expected normalized env rules in deterministic order\n%s", string(secondContent))
+	}
+	if strings.Contains(string(secondContent), "# local rule\n.env\n") {
+		t.Fatalf("expected unmanaged duplicate env line to be removed\n%s", string(secondContent))
+	}
 	if string(firstContent) != string(secondContent) {
 		t.Fatalf("expected rerun to remain byte-stable\nfirst:\n%s\nsecond:\n%s", string(firstContent), string(secondContent))
 	}
