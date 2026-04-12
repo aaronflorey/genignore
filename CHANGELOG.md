@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/aaronflorey/genignore/compare/v1.1.0...v1.2.0) (2026-04-12)
+
+
+### Features
+
+* **260412-3md:** enforce deterministic env rule normalization ([c33ef72](https://github.com/aaronflorey/genignore/commit/c33ef724414c0850f48dbf6c4b4b4989c0d49dde))
+
+
+### Fixes
+
+* **260412-4v6:** update stale env suffix expectation ([0ccbe01](https://github.com/aaronflorey/genignore/commit/0ccbe0113653cefcdaf19296549bb913b281baa4))
+
 ## [1.1.0](https://github.com/aaronflorey/genignore/compare/v1.0.1...v1.1.0) (2026-04-12)
 
 
