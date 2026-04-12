@@ -425,3 +425,139 @@ func TestUpsertDedupPreservesAmbiguousSemanticDifference(t *testing.T) {
 		t.Fatalf("expected managed storage/ rule to remain\n%s", value)
 	}
 }
+
+func TestBuildManagedBlockAlwaysIncludesEnvIgnoreRules(t *testing.T) {
+	t.Parallel()
+
+	block := BuildManagedBlock([]string{"go"}, "bin/\n")
+
+	for _, line := range []string{".env", ".env.*"} {
+		if !strings.Contains(block, "\n"+line+"\n") {
+			t.Fatalf("expected managed block to include %q\n%s", line, block)
+		}
+	}
+}
+
+func TestBuildManagedBlockAlwaysIncludesEnvExceptions(t *testing.T) {
+	t.Parallel()
+
+	block := BuildManagedBlock([]string{"go"}, "bin/\n")
+
+	for _, line := range []string{"!.env.example", "!.env.ci"} {
+		if !strings.Contains(block, "\n"+line+"\n") {
+			t.Fatalf("expected managed block to include %q\n%s", line, block)
+		}
+	}
+}
+
+func TestUpsertEnvReconcilesExistingRulesDeterministically(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"/.env",
+		".env",
+		".env",
+		".env.*",
+		"!.env.example",
+		"!.env.ci",
+		"!.env.local",
+		"*.log",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed file failed: %v", err)
+	}
+
+	m := NewManager(dir)
+	block := BuildManagedBlock([]string{"go"}, "bin/\n")
+	if _, err := m.UpsertManagedBlock(block, false); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+
+	for _, line := range []string{".env", ".env.*", "!.env.example", "!.env.ci"} {
+		if countExactLine(value, line) != 1 {
+			t.Fatalf("expected exactly one %q in reconciled output\n%s", line, value)
+		}
+	}
+	if strings.Contains(value, "\n/.env\n") {
+		t.Fatalf("expected rooted duplicate /.env to be reconciled\n%s", value)
+	}
+	if !strings.Contains(value, "\n!.env.local\n") {
+		t.Fatalf("expected env-specific exception to remain represented\n%s", value)
+	}
+}
+
+func TestUpsertEnvEquivalentRerunIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	m := NewManager(dir)
+
+	firstBlock := BuildManagedBlock([]string{"go"}, strings.Join([]string{
+		"bin/",
+		"!.env.ci",
+		".env.*",
+		"!.env.example",
+		".env",
+		"",
+	}, "\n"))
+	if _, err := m.UpsertManagedBlock(firstBlock, false); err != nil {
+		t.Fatalf("first upsert failed: %v", err)
+	}
+	firstContent, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read first content failed: %v", err)
+	}
+	firstInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat first content failed: %v", err)
+	}
+
+	secondBlock := BuildManagedBlock([]string{"go"}, strings.Join([]string{
+		"bin/",
+		".env",
+		"!.env.example",
+		".env.*",
+		"!.env.ci",
+		"",
+	}, "\n"))
+
+	time.Sleep(20 * time.Millisecond)
+	if _, err := m.UpsertManagedBlock(secondBlock, false); err != nil {
+		t.Fatalf("second upsert failed: %v", err)
+	}
+	secondContent, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read second content failed: %v", err)
+	}
+	secondInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat second content failed: %v", err)
+	}
+
+	if string(firstContent) != string(secondContent) {
+		t.Fatalf("expected equivalent env content rerun to be byte-identical\nfirst:\n%s\nsecond:\n%s", string(firstContent), string(secondContent))
+	}
+	if !firstInfo.ModTime().Equal(secondInfo.ModTime()) {
+		t.Fatalf("expected equivalent env content rerun to avoid rewriting file")
+	}
+}
+
+func countExactLine(content, line string) int {
+	count := 0
+	for _, current := range strings.Split(content, "\n") {
+		if current == line {
+			count++
+		}
+	}
+	return count
+}
