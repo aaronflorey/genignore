@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -41,17 +42,109 @@ func BuildManagedBlock(providers []string, template string) string {
 	return strings.Join(lines, "\n")
 }
 
-func normalizeTemplate(template string) string {
+var requiredEnvRules = []string{".env", ".env.*", "!.env.example", "!.env.ci"}
+
+func normalizeTemplate(template string, envRuleSources ...[]string) string {
 	lines := strings.Split(template, "\n")
 	normalized := make([]string, 0, len(lines))
+	envRules := make(map[string]struct{})
+
 	for _, line := range lines {
 		if isToptalBoilerplateComment(line) {
+			continue
+		}
+		if canonical, ok := canonicalizeEnvRule(line); ok {
+			envRules[canonical] = struct{}{}
 			continue
 		}
 		normalized = append(normalized, line)
 	}
 
-	return strings.Trim(strings.Join(normalized, "\n"), "\n")
+	for _, source := range envRuleSources {
+		for _, line := range source {
+			if canonical, ok := canonicalizeEnvRule(line); ok {
+				envRules[canonical] = struct{}{}
+			}
+		}
+	}
+
+	for _, required := range requiredEnvRules {
+		envRules[required] = struct{}{}
+	}
+
+	trimmedNormalized := trimTrailingBlankLines(normalized)
+	orderedEnvRules := orderedEnvRules(envRules)
+	if len(orderedEnvRules) > 0 {
+		if len(trimmedNormalized) > 0 && strings.TrimSpace(trimmedNormalized[len(trimmedNormalized)-1]) != "" {
+			trimmedNormalized = append(trimmedNormalized, "")
+		}
+		trimmedNormalized = append(trimmedNormalized, orderedEnvRules...)
+	}
+
+	return strings.Trim(strings.Join(trimmedNormalized, "\n"), "\n")
+}
+
+func orderedEnvRules(envRules map[string]struct{}) []string {
+	additional := make([]string, 0, len(envRules))
+	for line := range envRules {
+		if isRequiredEnvRule(line) || conflictsWithRequiredEnvRule(line) {
+			continue
+		}
+		additional = append(additional, line)
+	}
+	sort.Strings(additional)
+
+	ordered := make([]string, 0, len(requiredEnvRules)+len(additional))
+	ordered = append(ordered, requiredEnvRules...)
+	ordered = append(ordered, additional...)
+	return ordered
+}
+
+func isRequiredEnvRule(line string) bool {
+	for _, required := range requiredEnvRules {
+		if line == required {
+			return true
+		}
+	}
+	return false
+}
+
+func conflictsWithRequiredEnvRule(line string) bool {
+	switch line {
+	case "!.env", "!.env.*", ".env.example", ".env.ci":
+		return true
+	default:
+		return false
+	}
+}
+
+func trimTrailingBlankLines(lines []string) []string {
+	end := len(lines)
+	for end > 0 && strings.TrimSpace(lines[end-1]) == "" {
+		end--
+	}
+	return lines[:end]
+}
+
+func canonicalizeEnvRule(line string) (string, bool) {
+	if !isRuleLine(line) {
+		return "", false
+	}
+
+	trimmed := strings.TrimSpace(line)
+	negated := strings.HasPrefix(trimmed, "!")
+	if negated {
+		trimmed = strings.TrimPrefix(trimmed, "!")
+	}
+	trimmed = strings.TrimPrefix(trimmed, "/")
+	if !strings.HasPrefix(trimmed, ".env") {
+		return "", false
+	}
+
+	if negated {
+		return "!" + trimmed, true
+	}
+	return trimmed, true
 }
 
 func isToptalBoilerplateComment(line string) bool {
@@ -133,6 +226,9 @@ func mergeManagedBlock(existing, block string) (string, error) {
 	if malformed {
 		return "", fmt.Errorf("malformed managed markers in .gitignore: ensure exactly one %q and one %q in order", StartMarker, EndMarker)
 	}
+	if normalizedBlock, ok := normalizeManagedBlockWithExistingEnvRules(existing, block); ok {
+		block = normalizedBlock
+	}
 	managedRules := buildManagedRuleIndex(block)
 	if !hasMarkers {
 		existing = dedupeUnmanagedLines(existing, managedRules)
@@ -148,6 +244,53 @@ func mergeManagedBlock(existing, block string) (string, error) {
 	prefix := dedupeUnmanagedLines(existing[:start], managedRules)
 	suffix := dedupeUnmanagedLines(existing[end:], managedRules)
 	return prefix + block + suffix, nil
+}
+
+func normalizeManagedBlockWithExistingEnvRules(existing, block string) (string, bool) {
+	providers, template, ok := parseManagedBlock(block)
+	if !ok {
+		return "", false
+	}
+
+	return BuildManagedBlock(providers, normalizeTemplate(template, collectEnvRules(existing))), true
+}
+
+func parseManagedBlock(block string) ([]string, string, bool) {
+	lines := strings.Split(block, "\n")
+	providerIndex := -1
+	endIndex := -1
+	for idx, line := range lines {
+		if strings.HasPrefix(line, "# Providers: ") {
+			providerIndex = idx
+		}
+		if line == EndMarker {
+			endIndex = idx
+			break
+		}
+	}
+
+	if providerIndex == -1 || endIndex == -1 || providerIndex >= endIndex {
+		return nil, "", false
+	}
+
+	providerCSV := strings.TrimPrefix(lines[providerIndex], "# Providers: ")
+	providers := []string{}
+	if providerCSV != "" {
+		providers = strings.Split(providerCSV, ",")
+	}
+	template := strings.Join(lines[providerIndex+1:endIndex], "\n")
+	return providers, template, true
+}
+
+func collectEnvRules(content string) []string {
+	lines := strings.Split(content, "\n")
+	envRules := make([]string, 0)
+	for _, line := range lines {
+		if canonical, ok := canonicalizeEnvRule(line); ok {
+			envRules = append(envRules, canonical)
+		}
+	}
+	return envRules
 }
 
 type managedRuleIndex struct {
