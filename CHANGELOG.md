@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.0](https://github.com/aaronflorey/genignore/compare/v1.2.0...v1.3.0) (2026-04-13)
+
+
+### Features
+
+* **app:** fan out detect across packages subfolders ([fdc443b](https://github.com/aaronflorey/genignore/commit/fdc443bea4e7b2f019c219976e9c78ea43d22fc1))
+* initial commit ([e762f19](https://github.com/aaronflorey/genignore/commit/e762f192863c2575b62a8e29712de1f554b6a4ef))
+* **provider:** Detect one-level project signals ([63796db](https://github.com/aaronflorey/genignore/commit/63796dbfa9208730921592fca905bad38de7f425))
+
 ## [1.2.0](https://github.com/aaronflorey/genignore/compare/v1.1.0...v1.2.0) (2026-04-13)
 
 
