@@ -83,7 +83,7 @@ func (f DetectorFunc) Detect(ctx context.Context, cwd string) Result {
 func Registry() map[string]Detector {
 	return map[string]Detector{
 		"composer":         fileExistsDetector("composer", "composer.json", "found composer.json"),
-		"node":             fileExistsDetector("node", "package.json", "found package.json"),
+		"node":             nodeDetector(),
 		"go":               fileExistsDetector("go", "go.mod", "found go.mod"),
 		"terraform":        anyGlobDetector("terraform", "found terraform file", "*.tf", "*.tfvars", ".terraform.lock.hcl"),
 		"rust":             fileExistsDetector("rust", "Cargo.toml", "found Cargo.toml"),
@@ -167,9 +167,11 @@ type signalDetector struct {
 
 func fileSignal(fileName string) func(cwd string) (string, bool) {
 	return func(cwd string) (string, bool) {
-		path := filepath.Join(cwd, fileName)
-		if _, err := os.Stat(path); err == nil {
-			return fileName, true
+		for _, dir := range oneLevelSearchDirs(cwd) {
+			path := filepath.Join(dir, fileName)
+			if _, err := os.Stat(path); err == nil {
+				return fileName, true
+			}
 		}
 		return "", false
 	}
@@ -188,13 +190,15 @@ func anyFileSignal(fileNames ...string) func(cwd string) (string, bool) {
 
 func anyGlobSignal(reason string, patterns ...string) func(cwd string) (string, bool) {
 	return func(cwd string) (string, bool) {
-		for _, pattern := range patterns {
-			matches, err := filepath.Glob(filepath.Join(cwd, pattern))
-			if err != nil {
-				continue
-			}
-			if len(matches) > 0 {
-				return reason, true
+		for _, dir := range oneLevelSearchDirs(cwd) {
+			for _, pattern := range patterns {
+				matches, err := filepath.Glob(filepath.Join(dir, pattern))
+				if err != nil {
+					continue
+				}
+				if len(matches) > 0 {
+					return reason, true
+				}
 			}
 		}
 		return "", false
@@ -241,17 +245,18 @@ func ideInstallCandidatesForKey(key string) []string {
 
 func vueDetector() Detector {
 	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		for _, file := range []string{"vue.config.js", "vue.config.ts"} {
-			path := filepath.Join(cwd, file)
-			if _, err := os.Stat(path); err == nil {
-				return Result{Key: "vue", Matched: true, Reason: "found vue config", Evidence: path}
-			} else if os.IsPermission(err) {
-				return Result{Key: "vue", Matched: false, Reason: "permission denied", Evidence: path, Error: err.Error()}
+		for _, dir := range oneLevelSearchDirs(cwd) {
+			for _, file := range []string{"vue.config.js", "vue.config.ts"} {
+				path := filepath.Join(dir, file)
+				if _, err := os.Stat(path); err == nil {
+					return Result{Key: "vue", Matched: true, Reason: "found vue config", Evidence: path}
+				} else if os.IsPermission(err) {
+					return Result{Key: "vue", Matched: false, Reason: "permission denied", Evidence: path, Error: err.Error()}
+				}
 			}
 		}
 
-		packagePath := filepath.Join(cwd, "package.json")
-		content, result, ok := readSignalFile("vue", packagePath)
+		content, packagePath, result, ok := readSignalFile("vue", cwd, "package.json")
 		if !ok {
 			return result
 		}
@@ -275,20 +280,8 @@ func vueDetector() Detector {
 
 func fileExistsDetector(key, fileName, reason string) Detector {
 	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		path := filepath.Join(cwd, fileName)
-		if _, err := os.Stat(path); err == nil {
-			return Result{Key: key, Matched: true, Reason: reason, Evidence: path}
-		} else if os.IsPermission(err) {
-			return Result{Key: key, Matched: false, Reason: "permission denied", Error: err.Error()}
-		}
-		return Result{Key: key, Matched: false, Reason: "signal not found"}
-	})
-}
-
-func anyFileDetector(key string, files []string, reason string) Detector {
-	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		for _, file := range files {
-			path := filepath.Join(cwd, file)
+		for _, dir := range oneLevelSearchDirs(cwd) {
+			path := filepath.Join(dir, fileName)
 			if _, err := os.Stat(path); err == nil {
 				return Result{Key: key, Matched: true, Reason: reason, Evidence: path}
 			} else if os.IsPermission(err) {
@@ -299,14 +292,35 @@ func anyFileDetector(key string, files []string, reason string) Detector {
 	})
 }
 
+func anyFileDetector(key string, files []string, reason string) Detector {
+	return DetectorFunc(func(_ context.Context, cwd string) Result {
+		for _, dir := range oneLevelSearchDirs(cwd) {
+			for _, file := range files {
+				path := filepath.Join(dir, file)
+				if _, err := os.Stat(path); err == nil {
+					return Result{Key: key, Matched: true, Reason: reason, Evidence: path}
+				} else if os.IsPermission(err) {
+					return Result{Key: key, Matched: false, Reason: "permission denied", Error: err.Error()}
+				}
+			}
+		}
+		return Result{Key: key, Matched: false, Reason: "signal not found"}
+	})
+}
+
+func nodeDetector() Detector {
+	return anyFileDetector("node", []string{"package.json", "bun.lock", "bun.lockb"}, "found node project file")
+}
+
 func laravelDetector() Detector {
 	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		artisan := filepath.Join(cwd, "artisan")
-		if _, err := os.Stat(artisan); err == nil {
-			return Result{Key: "laravel", Matched: true, Reason: "found artisan file", Evidence: artisan}
+		for _, dir := range oneLevelSearchDirs(cwd) {
+			artisan := filepath.Join(dir, "artisan")
+			if _, err := os.Stat(artisan); err == nil {
+				return Result{Key: "laravel", Matched: true, Reason: "found artisan file", Evidence: artisan}
+			}
 		}
-		composer := filepath.Join(cwd, "composer.json")
-		content, result, ok := readSignalFile("laravel", composer)
+		content, composer, result, ok := readSignalFile("laravel", cwd, "composer.json")
 		if !ok {
 			return result
 		}
@@ -319,8 +333,7 @@ func laravelDetector() Detector {
 
 func reactDetector() Detector {
 	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		packagePath := filepath.Join(cwd, "package.json")
-		content, result, ok := readSignalFile("react", packagePath)
+		content, packagePath, result, ok := readSignalFile("react", cwd, "package.json")
 		if !ok {
 			return result
 		}
@@ -344,8 +357,7 @@ func reactDetector() Detector {
 
 func flutterDetector() Detector {
 	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		pubspecPath := filepath.Join(cwd, "pubspec.yaml")
-		content, result, ok := readSignalFile("flutter", pubspecPath)
+		content, pubspecPath, result, ok := readSignalFile("flutter", cwd, "pubspec.yaml")
 		if !ok {
 			return result
 		}
@@ -391,16 +403,38 @@ func pathDetector(key string, binaries []string, reason string) Detector {
 	})
 }
 
-func readSignalFile(key string, path string) ([]byte, Result, bool) {
-	content, err := os.ReadFile(path)
-	if err == nil {
-		return content, Result{}, true
+func readSignalFile(key, cwd, fileName string) ([]byte, string, Result, bool) {
+	for _, dir := range oneLevelSearchDirs(cwd) {
+		path := filepath.Join(dir, fileName)
+		content, err := os.ReadFile(path)
+		if err == nil {
+			return content, path, Result{}, true
+		}
+		if os.IsNotExist(err) {
+			continue
+		}
+		if os.IsPermission(err) {
+			return nil, "", Result{Key: key, Matched: false, Reason: "permission denied", Evidence: path, Error: err.Error()}, false
+		}
+		return nil, "", Result{Key: key, Matched: false, Reason: "failed to read signal file", Evidence: path, Error: err.Error()}, false
 	}
-	if os.IsNotExist(err) {
-		return nil, Result{Key: key, Matched: false, Reason: "signal not found"}, false
+
+	return nil, "", Result{Key: key, Matched: false, Reason: "signal not found"}, false
+}
+
+func oneLevelSearchDirs(cwd string) []string {
+	dirs := []string{cwd}
+	entries, err := os.ReadDir(cwd)
+	if err != nil {
+		return dirs
 	}
-	if os.IsPermission(err) {
-		return nil, Result{Key: key, Matched: false, Reason: "permission denied", Evidence: path, Error: err.Error()}, false
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dirs = append(dirs, filepath.Join(cwd, entry.Name()))
 	}
-	return nil, Result{Key: key, Matched: false, Reason: "failed to read signal file", Evidence: path, Error: err.Error()}, false
+
+	return dirs
 }

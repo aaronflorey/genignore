@@ -6,7 +6,7 @@ It detects relevant ignore templates for the current project and environment, fe
 
 ## What It Does
 
-- Detects ignore templates from the current directory, OS, and installed tools.
+- Detects ignore templates from the current directory, one-level subdirectories, OS, and installed tools.
 - Lets you add extra templates explicitly when detection is not enough.
 - Keeps provider ordering deterministic so repeated runs stay stable.
 - Preserves everything outside the managed markers in `.gitignore`.
@@ -114,6 +114,7 @@ golangci-lint run
 ## Notes
 
 - The Toptal gitignore API is required at runtime.
-- The tool works on the current directory only.
+- The tool scans the current directory and one level of subdirectories.
 - Unsupported provider keys are reported as warnings while valid keys still proceed.
 - Re-running equivalent commands should not create unnecessary `.gitignore` churn.
+- Node detection treats `package.json`, `bun.lock`, and `bun.lockb` as project signals.

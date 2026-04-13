@@ -23,6 +23,26 @@ func TestFileExistsDetectorMatchesPath(t *testing.T) {
 	}
 }
 
+func TestFileExistsDetectorMatchesOneLevelSubdirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "service")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested directory: %v", err)
+	}
+
+	path := filepath.Join(nested, "go.mod")
+	if err := os.WriteFile(path, []byte("module example.com/test\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	result := fileExistsDetector("go", "go.mod", "found go.mod").Detect(context.Background(), dir)
+	if result != (Result{Key: "go", Matched: true, Reason: "found go.mod", Evidence: path}) {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
 func TestOSDetectorProvidesStableEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -124,6 +144,25 @@ func TestVueDetectorDoesNotMatchGenericViteConfigWithoutVueSignal(t *testing.T) 
 
 	result := vueDetector().Detect(context.Background(), dir)
 	if result != (Result{Key: "vue", Matched: false, Reason: "signal not found"}) {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestVueDetectorMatchesConfigInOneLevelSubdirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "frontend", "vue.config.ts")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("mkdir frontend directory: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte("export default {}\n"), 0o644); err != nil {
+		t.Fatalf("write vue config: %v", err)
+	}
+
+	result := vueDetector().Detect(context.Background(), dir)
+	expected := Result{Key: "vue", Matched: true, Reason: "found vue config", Evidence: configPath}
+	if result != expected {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 }
@@ -494,6 +533,84 @@ func TestRequestedLanguageDetectorsMatchCommonProjectSignals(t *testing.T) {
 				t.Fatalf("expected matched result for %q, got %+v", tc.key, result)
 			}
 		})
+	}
+}
+
+func TestNodeDetectorMatchesBunLockfiles(t *testing.T) {
+	t.Parallel()
+
+	detector, ok := Registry()["node"]
+	if !ok {
+		t.Fatalf("missing node detector")
+	}
+
+	for _, tc := range []struct {
+		name    string
+		relPath string
+	}{
+		{name: "matches bun.lock in root", relPath: "bun.lock"},
+		{name: "matches bun.lockb in one-level subdirectory", relPath: filepath.Join("web", "bun.lockb")},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tc.relPath)
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatalf("mkdir signal parent: %v", err)
+			}
+			if err := os.WriteFile(path, []byte("\n"), 0o644); err != nil {
+				t.Fatalf("write signal file: %v", err)
+			}
+
+			result := detector.Detect(context.Background(), dir)
+			expected := Result{Key: "node", Matched: true, Reason: "found node project file", Evidence: path}
+			if result != expected {
+				t.Fatalf("unexpected result: %+v", result)
+			}
+		})
+	}
+}
+
+func TestNodeDetectorDoesNotMatchDeeperThanOneLevel(t *testing.T) {
+	t.Parallel()
+
+	detector, ok := Registry()["node"]
+	if !ok {
+		t.Fatalf("missing node detector")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "apps", "web", "bun.lock")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir signal parent: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("\n"), 0o644); err != nil {
+		t.Fatalf("write signal file: %v", err)
+	}
+
+	result := detector.Detect(context.Background(), dir)
+	expected := Result{Key: "node", Matched: false, Reason: "signal not found"}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestReactDetectorMatchesPackageJSONInOneLevelSubdirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packagePath := filepath.Join(dir, "frontend", "package.json")
+	if err := os.MkdirAll(filepath.Dir(packagePath), 0o755); err != nil {
+		t.Fatalf("mkdir frontend directory: %v", err)
+	}
+	if err := os.WriteFile(packagePath, []byte(`{"dependencies":{"react":"^19.0.0"}}`), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+
+	result := reactDetector().Detect(context.Background(), dir)
+	expected := Result{Key: "react", Matched: true, Reason: "package.json dependency includes react", Evidence: packagePath}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 }
 
