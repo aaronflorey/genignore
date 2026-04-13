@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/aaronflorey/genignore/compare/v1.1.0...v1.2.0) (2026-04-13)
+
+
+### Features
+
+* initial commit ([e762f19](https://github.com/aaronflorey/genignore/commit/e762f192863c2575b62a8e29712de1f554b6a4ef))
+* **provider:** Detect one-level project signals ([63796db](https://github.com/aaronflorey/genignore/commit/63796dbfa9208730921592fca905bad38de7f425))
+
 ## [1.1.0](https://github.com/aaronflorey/genignore/compare/v1.0.1...v1.1.0) (2026-04-12)
 
 
