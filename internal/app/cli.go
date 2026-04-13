@@ -154,6 +154,33 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 	}
 	label := lipgloss.NewStyle().Bold(true)
 	fmt.Printf("%s %s\n", label.Render("Command:"), result.Command)
+	if len(result.Targets) > 0 {
+		for _, target := range result.Targets {
+			fmt.Printf("%s %s\n", label.Render("Target:"), target.Path)
+			if len(target.DetectedProviders) > 0 {
+				fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(target.DetectedProviders))
+			}
+			fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(target.FinalProviders))
+			if verbose {
+				for _, detection := range target.DetectionResults {
+					if !detection.Matched && detection.Error == "" {
+						continue
+					}
+					fmt.Printf("%s %s\n", label.Render("Detection:"), formatDetectionResult(detection))
+				}
+			}
+			if target.FileAction != "" {
+				fmt.Printf("%s %s\n", label.Render("File:"), target.FileAction)
+			}
+		}
+		for _, warning := range result.UnsupportedKeyWarnings {
+			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		}
+		for _, warning := range result.RemoteProviderWarnings {
+			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		}
+		return
+	}
 	if len(result.DetectedProviders) > 0 {
 		fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(result.DetectedProviders))
 	}

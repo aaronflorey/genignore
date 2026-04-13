@@ -627,3 +627,116 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 		t.Fatalf("expected unmanaged trailing lines preserved\n%s", string(secondContent))
 	}
 }
+
+func TestDetectFansOutAcrossPackagesChildrenAndSkipsRootGitignore(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packagesDir := filepath.Join(dir, "packages")
+	apiDir := filepath.Join(packagesDir, "api")
+	webDir := filepath.Join(packagesDir, "web")
+	if err := os.MkdirAll(apiDir, 0o755); err != nil {
+		t.Fatalf("create api package dir failed: %v", err)
+	}
+	if err := os.MkdirAll(webDir, 0o755); err != nil {
+		t.Fatalf("create web package dir failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(apiDir, "go.mod"), []byte("module example.com/api\n"), 0o644); err != nil {
+		t.Fatalf("write api go.mod failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(webDir, "package.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write web package.json failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/root\n"), 0o644); err != nil {
+		t.Fatalf("write root go.mod failed: %v", err)
+	}
+
+	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
+	svc := &Service{
+		CWD:     dir,
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"go": provider.DetectorFunc(func(_ context.Context, cwd string) provider.Result {
+				if _, err := os.Stat(filepath.Join(cwd, "go.mod")); err == nil {
+					return provider.Result{Key: "go", Matched: true, Reason: "found go.mod"}
+				}
+				return provider.Result{Key: "go", Matched: false, Reason: "signal not found"}
+			}),
+			"node": provider.DetectorFunc(func(_ context.Context, cwd string) provider.Result {
+				if _, err := os.Stat(filepath.Join(cwd, "package.json")); err == nil {
+					return provider.Result{Key: "node", Matched: true, Reason: "found package.json"}
+				}
+				return provider.Result{Key: "node", Matched: false, Reason: "signal not found"}
+			}),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if len(res.Targets) != 2 {
+		t.Fatalf("expected two target results, got %d", len(res.Targets))
+	}
+	if res.Targets[0].Path != filepath.Join("packages", "api") {
+		t.Fatalf("unexpected first target path: %s", res.Targets[0].Path)
+	}
+	if res.Targets[1].Path != filepath.Join("packages", "web") {
+		t.Fatalf("unexpected second target path: %s", res.Targets[1].Path)
+	}
+	if !reflect.DeepEqual(res.Targets[0].FinalProviders, []string{"go"}) {
+		t.Fatalf("unexpected api final providers: %v", res.Targets[0].FinalProviders)
+	}
+	if !reflect.DeepEqual(res.Targets[1].FinalProviders, []string{"node"}) {
+		t.Fatalf("unexpected web final providers: %v", res.Targets[1].FinalProviders)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("expected one template request per package, got %d", len(client.requests))
+	}
+	if !reflect.DeepEqual(client.requests[0], []string{"go"}) {
+		t.Fatalf("unexpected first request providers: %v", client.requests[0])
+	}
+	if !reflect.DeepEqual(client.requests[1], []string{"node"}) {
+		t.Fatalf("unexpected second request providers: %v", client.requests[1])
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("expected root .gitignore to remain untouched")
+	}
+	for _, packagePath := range []string{apiDir, webDir} {
+		content, readErr := os.ReadFile(filepath.Join(packagePath, ".gitignore"))
+		if readErr != nil {
+			t.Fatalf("expected package .gitignore to be written in %s: %v", packagePath, readErr)
+		}
+		if !strings.Contains(string(content), gitignore.StartMarker) {
+			t.Fatalf("expected managed block markers in %s", packagePath)
+		}
+	}
+}
+
+func TestAddRemainsSingleTargetWhenPackagesDirectoryExists(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "packages", "api"), 0o755); err != nil {
+		t.Fatalf("create packages directory failed: %v", err)
+	}
+
+	client := &fakeAPI{available: provider.SupportedKeys, template: "node_modules/\n"}
+	svc := &Service{CWD: dir, Client: client, Manager: gitignore.NewManager(dir)}
+
+	res, err := svc.Add(context.Background(), AddOptions{Keys: []string{"node"}})
+	if err != nil {
+		t.Fatalf("add failed: %v", err)
+	}
+	if res.FileAction != gitignore.FileActionCreated {
+		t.Fatalf("unexpected root file action: %s", res.FileAction)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); err != nil {
+		t.Fatalf("expected root .gitignore to be created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "packages", "api", ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("expected add to avoid writing package .gitignore")
+	}
+}

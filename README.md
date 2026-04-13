@@ -7,6 +7,7 @@ It detects relevant ignore templates for the current project and environment, fe
 ## What It Does
 
 - Detects ignore templates from the current directory, one-level subdirectories, OS, and installed tools.
+- Fans out `detect` across `packages/*` children when a `packages` directory exists.
 - Lets you add extra templates explicitly when detection is not enough.
 - Keeps provider ordering deterministic so repeated runs stay stable.
 - Preserves everything outside the managed markers in `.gitignore`.
@@ -85,6 +86,8 @@ Everything outside that block is preserved on every run.
 `detect`
 
 - Replaces the managed provider set with `detected + include - exclude`.
+- If `./packages` exists and has direct child directories, `detect` runs per child and writes `packages/<child>/.gitignore` for each package.
+- In `packages/*` fanout mode, `detect` does not write a root `.gitignore`.
 - Fails if the final provider set is empty.
 - Supports `--dry-run`, `--json`, and `--verbose`.
 
@@ -92,6 +95,7 @@ Everything outside that block is preserved on every run.
 
 - Appends only missing valid providers to the current managed set.
 - Keeps existing managed providers intact.
+- Always targets only the current directory `.gitignore` (no `packages/*` fanout).
 - Supports `--dry-run`, `--json`, and `--verbose`.
 
 `list`
@@ -115,6 +119,7 @@ golangci-lint run
 
 - The Toptal gitignore API is required at runtime.
 - The tool scans the current directory and one level of subdirectories.
+- If a `packages` directory exists, `detect` targets each direct `packages/*` child instead of the root.
 - Unsupported provider keys are reported as warnings while valid keys still proceed.
 - Re-running equivalent commands should not create unnecessary `.gitignore` churn.
 - Node detection treats `package.json`, `bun.lock`, and `bun.lockb` as project signals.
