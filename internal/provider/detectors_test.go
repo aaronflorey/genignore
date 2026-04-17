@@ -43,6 +43,52 @@ func TestFileExistsDetectorMatchesOneLevelSubdirectory(t *testing.T) {
 	}
 }
 
+func TestFileExistsDetectorSkipsIgnoredOneLevelSubdirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "service")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("service/\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+
+	path := filepath.Join(nested, "go.mod")
+	if err := os.WriteFile(path, []byte("module example.com/test\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	result := fileExistsDetector("go", "go.mod", "found go.mod").Detect(context.Background(), dir)
+	if result != (Result{Key: "go", Matched: false, Reason: "signal not found"}) {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestFileExistsDetectorRespectsNegatedOneLevelSubdirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "service")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*\n!service/\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+
+	path := filepath.Join(nested, "go.mod")
+	if err := os.WriteFile(path, []byte("module example.com/test\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	result := fileExistsDetector("go", "go.mod", "found go.mod").Detect(context.Background(), dir)
+	if result != (Result{Key: "go", Matched: true, Reason: "found go.mod", Evidence: path}) {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
 func TestOSDetectorProvidesStableEvidence(t *testing.T) {
 	t.Parallel()
 
