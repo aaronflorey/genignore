@@ -6,7 +6,7 @@ It detects relevant ignore templates for the current project and environment, fe
 
 ## What It Does
 
-- Detects ignore templates from the current directory, one-level subdirectories, OS, and installed tools.
+- Detects ignore templates from the current directory, one-level non-ignored subdirectories, OS, and installed tools.
 - Fans out `detect` across `packages/*` children when a `packages` directory exists.
 - Lets you add extra templates explicitly when detection is not enough.
 - Keeps provider ordering deterministic so repeated runs stay stable.
@@ -118,7 +118,7 @@ golangci-lint run
 ## Notes
 
 - The Toptal gitignore API is required at runtime.
-- The tool scans the current directory and one level of subdirectories.
+- The tool scans the current directory and one level of non-ignored subdirectories.
 - If a `packages` directory exists, `detect` targets each direct `packages/*` child instead of the root.
 - Unsupported provider keys are reported as warnings while valid keys still proceed.
 - Re-running equivalent commands should not create unnecessary `.gitignore` churn.

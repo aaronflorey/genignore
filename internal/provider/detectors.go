@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/go-git/go-billy/v5/osfs"
+	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
 
 var ideInstallCandidatesByKey = map[string][]string{
@@ -429,12 +432,26 @@ func oneLevelSearchDirs(cwd string) []string {
 		return dirs
 	}
 
+	matcher := loadGitignoreMatcher(cwd)
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+		if matcher != nil && matcher.Match([]string{entry.Name()}, true) {
 			continue
 		}
 		dirs = append(dirs, filepath.Join(cwd, entry.Name()))
 	}
 
 	return dirs
+}
+
+func loadGitignoreMatcher(cwd string) gitignore.Matcher {
+	patterns, err := gitignore.ReadPatterns(osfs.New(cwd), nil)
+	if err != nil || len(patterns) == 0 {
+		return nil
+	}
+
+	return gitignore.NewMatcher(patterns)
 }
