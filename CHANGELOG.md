@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/aaronflorey/genignore/compare/v1.3.0...v1.4.0) (2026-04-17)
+
+
+### Features
+
+* **provider:** Skip ignored directories during detection ([caa0ff1](https://github.com/aaronflorey/genignore/commit/caa0ff10b900275b3c14a001020a9a0969a28a90))
+
 ## [1.3.0](https://github.com/aaronflorey/genignore/compare/v1.2.0...v1.3.0) (2026-04-13)
 
 
