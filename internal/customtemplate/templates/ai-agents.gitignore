@@ -1,0 +1,4 @@
+# AI agent tooling
+.agents/
+.claude/
+.cursor/

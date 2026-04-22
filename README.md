@@ -9,6 +9,7 @@ It detects relevant ignore templates for the current project and environment, fe
 - Detects ignore templates from the current directory, one-level non-ignored subdirectories, OS, and installed tools.
 - Fans out `detect` across `packages/*` children when a `packages` directory exists.
 - Lets you add extra templates explicitly when detection is not enough.
+- Supports embedded custom templates that are bundled in the binary.
 - Keeps provider ordering deterministic so repeated runs stay stable.
 - Preserves everything outside the managed markers in `.gitignore`.
 - Supports human-readable output and machine-readable JSON output.
@@ -47,6 +48,12 @@ Append templates to the existing managed set:
 
 ```bash
 genignore add go node
+```
+
+Add the bundled AI agent tooling template:
+
+```bash
+genignore add ai-agents
 ```
 
 List every supported template key:
@@ -105,6 +112,20 @@ Everything outside that block is preserved on every run.
 `search <term>`
 
 - Filters supported provider keys by a search term.
+
+## Embedded Custom Templates
+
+`genignore` can bundle custom templates directly in the binary so they work without depending on remote provider support.
+
+- Built-in custom key: `ai-agents`
+- Included rules: `.agents/`, `.claude/`, `.cursor/`
+- Custom and remote templates can be mixed in one run (for example: `genignore add go ai-agents`)
+
+To add another embedded template in the codebase:
+
+1. Add a new `*.gitignore` file under `internal/customtemplate/templates/`.
+2. Register it in `internal/customtemplate/definitions.go`.
+3. Run `go test ./...` to verify the new key is wired correctly.
 
 ## Development checks
 

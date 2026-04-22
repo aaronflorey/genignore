@@ -327,7 +327,7 @@ func sanitizeKeys(keys []string) ([]string, []string) {
 
 func remoteDiffWarnings(remote map[string]struct{}) []string {
 	warnings := make([]string, 0)
-	for _, key := range provider.SupportedKeys {
+	for _, key := range provider.RemoteSupportedKeys() {
 		if _, ok := remote[key]; !ok {
 			warnings = append(warnings, fmt.Sprintf("supported provider missing remotely: %s", key))
 		}

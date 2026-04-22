@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/aaronflorey/genignore/internal/customtemplate"
 )
 
 const (
@@ -67,27 +69,52 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 	if len(providers) == 0 {
 		return TemplateResponse{}, fmt.Errorf("providers must not be empty")
 	}
-	joined := strings.Join(providers, ",")
-	u := c.templateURL + url.PathEscape(joined)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	remoteProviders := make([]string, 0, len(providers))
+	customProviders := make([]string, 0, len(providers))
+	for _, key := range providers {
+		if customtemplate.HasProvider(key) {
+			customProviders = append(customProviders, key)
+			continue
+		}
+		remoteProviders = append(remoteProviders, key)
+	}
+
+	parts := make([]string, 0, 2)
+	if len(remoteProviders) > 0 {
+		joined := strings.Join(remoteProviders, ",")
+		u := c.templateURL + url.PathEscape(joined)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return TemplateResponse{}, fmt.Errorf("build template request: %w", err)
+		}
+		res, err := c.httpClient.Do(req)
+		if err != nil {
+			return TemplateResponse{}, fmt.Errorf("request template API: %w", err)
+		}
+		defer func() {
+			_ = res.Body.Close()
+		}()
+		if res.StatusCode < 200 || res.StatusCode >= 300 {
+			return TemplateResponse{}, fmt.Errorf("template API returned status %d", res.StatusCode)
+		}
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return TemplateResponse{}, fmt.Errorf("read template API response: %w", err)
+		}
+		if strings.TrimSpace(string(body)) != "" {
+			parts = append(parts, string(body))
+		}
+	}
+
+	customContent, err := customtemplate.ContentForProviders(customProviders)
 	if err != nil {
-		return TemplateResponse{}, fmt.Errorf("build template request: %w", err)
+		return TemplateResponse{}, err
 	}
-	res, err := c.httpClient.Do(req)
-	if err != nil {
-		return TemplateResponse{}, fmt.Errorf("request template API: %w", err)
+	if customContent != "" {
+		parts = append(parts, customContent)
 	}
-	defer func() {
-		_ = res.Body.Close()
-	}()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return TemplateResponse{}, fmt.Errorf("template API returned status %d", res.StatusCode)
-	}
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return TemplateResponse{}, fmt.Errorf("read template API response: %w", err)
-	}
-	return TemplateResponse{Providers: providers, Content: string(body)}, nil
+
+	return TemplateResponse{Providers: providers, Content: strings.Join(parts, "\n\n")}, nil
 }
 
 func decodeAvailableProviders(body []byte) ([]string, error) {
