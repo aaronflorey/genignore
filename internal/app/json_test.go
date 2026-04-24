@@ -12,7 +12,7 @@ import (
 
 func TestJSONDetectCommandContract(t *testing.T) {
 	oldFactory := newCommandService
-	newCommandService = func(string) commandService {
+	newCommandService = func(string, Config) commandService {
 		return stubCommandService{detectResult: CommandResult{
 			Command:                "detect",
 			CWD:                    "/tmp/project",
@@ -81,7 +81,7 @@ func TestJSONDetectCommandContract(t *testing.T) {
 
 func TestJSONDetectCommandContractWithTargets(t *testing.T) {
 	oldFactory := newCommandService
-	newCommandService = func(string) commandService {
+	newCommandService = func(string, Config) commandService {
 		return stubCommandService{detectResult: CommandResult{
 			Command: "detect",
 			CWD:     "/tmp/monorepo",
@@ -153,7 +153,7 @@ func TestJSONDetectCommandContractWithTargets(t *testing.T) {
 
 func TestJSONAddCommandContractOmitsDetectOnlyFields(t *testing.T) {
 	oldFactory := newCommandService
-	newCommandService = func(string) commandService {
+	newCommandService = func(string, Config) commandService {
 		return stubCommandService{addResult: CommandResult{
 			Command:                "add",
 			CWD:                    "/tmp/project",

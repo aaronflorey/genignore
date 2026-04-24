@@ -187,6 +187,35 @@ func TestFetchTemplateSupportsEmbeddedCustomProviderWithoutRemoteRequest(t *test
 	}
 }
 
+func TestFetchTemplateSupportsWranglerEmbeddedCustomProviderWithoutRemoteRequest(t *testing.T) {
+	t.Parallel()
+
+	hitRemoteTemplate := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/templates/") {
+			hitRemoteTemplate = true
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.templateURL = server.URL + "/templates/"
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"wrangler"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if hitRemoteTemplate {
+		t.Fatalf("expected wrangler-only template fetch to skip remote API call")
+	}
+	for _, fragment := range []string{".wrangler/", ".dev.vars*", "!.dev.vars.example"} {
+		if !strings.Contains(resp.Content, fragment) {
+			t.Fatalf("missing %q in wrangler template content: %q", fragment, resp.Content)
+		}
+	}
+}
+
 func TestFetchTemplateMergesRemoteAndEmbeddedCustomTemplates(t *testing.T) {
 	t.Parallel()
 
@@ -216,5 +245,37 @@ func TestFetchTemplateMergesRemoteAndEmbeddedCustomTemplates(t *testing.T) {
 	}
 	if !strings.Contains(resp.Content, ".agents/") {
 		t.Fatalf("expected embedded custom template content in merge: %q", resp.Content)
+	}
+}
+
+func TestFetchTemplateMergesRemoteAndWranglerEmbeddedTemplates(t *testing.T) {
+	t.Parallel()
+
+	requestPath := ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath = r.URL.Path
+		if r.URL.Path != "/templates/go" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte("bin/\n"))
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.templateURL = server.URL + "/templates/"
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"go", "wrangler"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if requestPath != "/templates/go" {
+		t.Fatalf("expected remote request to include only remote providers, got %q", requestPath)
+	}
+	if !strings.Contains(resp.Content, "bin/") {
+		t.Fatalf("expected remote template content in merge: %q", resp.Content)
+	}
+	if !strings.Contains(resp.Content, ".wrangler/") {
+		t.Fatalf("expected wrangler template content in merge: %q", resp.Content)
 	}
 }

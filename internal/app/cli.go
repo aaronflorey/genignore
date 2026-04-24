@@ -19,8 +19,8 @@ type commandService interface {
 	Add(ctx context.Context, opts AddOptions) (CommandResult, error)
 }
 
-var newCommandService = func(cwd string) commandService {
-	return NewService(cwd)
+var newCommandService = func(cwd string, cfg Config) commandService {
+	return NewService(cwd, cfg)
 }
 
 func Run(args []string) int {
@@ -30,7 +30,13 @@ func Run(args []string) int {
 		return 1
 	}
 
-	service := newCommandService(cwd)
+	cfg, err := LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	service := newCommandService(cwd, cfg)
 	root := &cobra.Command{
 		Use:   "genignore",
 		Short: "Generate and manage gitignore block",

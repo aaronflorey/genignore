@@ -20,6 +20,7 @@ type APIClient interface {
 
 type Service struct {
 	CWD       string
+	Config    Config
 	Client    APIClient
 	Manager   *gitignore.Manager
 	Detectors map[string]provider.Detector
@@ -49,9 +50,10 @@ var detectCarryForwardOSProviders = map[string]struct{}{
 	"windows": {},
 }
 
-func NewService(cwd string) *Service {
+func NewService(cwd string, cfg Config) *Service {
 	return &Service{
 		CWD:       cwd,
+		Config:    cfg,
 		Client:    api.NewClient(),
 		Manager:   gitignore.NewManager(cwd),
 		Detectors: provider.Registry(),
@@ -66,7 +68,12 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 	remoteSet := makeSet(availableRemote)
 	remoteWarnings := remoteDiffWarnings(remoteSet)
 
-	include, includeWarnings := sanitizeKeys(opts.Include)
+	includeInput := opts.Include
+	if len(includeInput) == 0 {
+		includeInput = s.Config.Defaults.Providers
+	}
+
+	include, includeWarnings := sanitizeKeys(includeInput)
 	exclude, excludeWarnings := sanitizeKeys(opts.Exclude)
 	warnings := append(includeWarnings, excludeWarnings...)
 
@@ -177,7 +184,7 @@ func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *
 	if err != nil {
 		return TargetResult{}, err
 	}
-	block := gitignore.BuildManagedBlock(finalProviders, template.Content)
+	block := gitignore.BuildManagedBlock(finalProviders, template.Content, s.Config.Defaults.IgnoreRules)
 	action, err := manager.UpsertManagedBlock(block, dryRun)
 	if err != nil {
 		return TargetResult{}, err
@@ -268,7 +275,11 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 	remoteSet := makeSet(availableRemote)
 	remoteWarnings := remoteDiffWarnings(remoteSet)
 
-	keys, warnings := sanitizeKeys(opts.Keys)
+	inputKeys := make([]string, 0, len(s.Config.Defaults.Providers)+len(opts.Keys))
+	inputKeys = append(inputKeys, s.Config.Defaults.Providers...)
+	inputKeys = append(inputKeys, opts.Keys...)
+
+	keys, warnings := sanitizeKeys(inputKeys)
 	existing, err := s.Manager.ReadManagedProviders()
 	if err != nil {
 		return CommandResult{}, err
@@ -291,7 +302,7 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 	if err != nil {
 		return CommandResult{}, err
 	}
-	block := gitignore.BuildManagedBlock(finalProviders, template.Content)
+	block := gitignore.BuildManagedBlock(finalProviders, template.Content, s.Config.Defaults.IgnoreRules)
 	action, err := s.Manager.UpsertManagedBlock(block, opts.DryRun)
 	if err != nil {
 		return CommandResult{}, err

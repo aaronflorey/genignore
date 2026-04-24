@@ -12,4 +12,5 @@ type Definition struct {
 // 2) Register it here with a unique key and relative file path.
 var Definitions = []Definition{
 	{Key: "ai-agents", Path: "templates/ai-agents.gitignore"},
+	{Key: "wrangler", Path: "templates/wrangler.gitignore"},
 }

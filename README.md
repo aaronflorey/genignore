@@ -56,6 +56,12 @@ Add the bundled AI agent tooling template:
 genignore add ai-agents
 ```
 
+Add the bundled Wrangler template:
+
+```bash
+genignore add wrangler
+```
+
 List every supported template key:
 
 ```bash
@@ -88,6 +94,32 @@ The tool owns only the block between its markers inside `.gitignore`.
 
 Everything outside that block is preserved on every run.
 
+## Machine-Level Config
+
+`genignore` can load machine-level defaults from `$HOME/.config/genignore/config.toml`.
+
+Config is optional. If the file does not exist, commands keep their existing behavior.
+
+```toml
+[defaults]
+providers = ["terraform", "wrangler"]
+ignore_rules = [".direnv/", "coverage.out"]
+```
+
+Precedence is:
+
+1. Explicit CLI inputs
+2. Config defaults
+3. Automatic detection
+
+What that means in practice:
+
+- `detect --include ...` overrides config default providers.
+- `detect` uses config default providers when `--include` is absent.
+- `add` merges config default providers with the keys you pass.
+- `ignore_rules` append only inside the managed block.
+- Invalid config content fails fast with a clear error before command execution.
+
 ## Command Guide
 
 `detect`
@@ -117,9 +149,11 @@ Everything outside that block is preserved on every run.
 
 `genignore` can bundle custom templates directly in the binary so they work without depending on remote provider support.
 
-- Built-in custom key: `ai-agents`
-- Included rules: `.agents/`, `.claude/`, `.cursor/`
-- Custom and remote templates can be mixed in one run (for example: `genignore add go ai-agents`)
+- Built-in custom keys: `ai-agents`, `wrangler`
+- `ai-agents` includes: `.agents/`, `.claude/`, `.cursor/`
+- `wrangler` includes: `.wrangler/`, `.dev.vars*`, and `!.dev.vars.example`
+- The managed block also keeps `!.env.example` and `!.env.ci` committable through its canonical env-rule section
+- Custom and remote templates can be mixed in one run (for example: `genignore add go ai-agents wrangler`)
 
 To add another embedded template in the codebase:
 

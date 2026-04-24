@@ -472,6 +472,125 @@ func TestDetectAppliesIncludeExcludeWithSortedSelections(t *testing.T) {
 	}
 }
 
+func TestDetectUsesConfigDefaultProvidersWhenCLIIncludeMissing(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
+	svc := &Service{
+		CWD:     dir,
+		Config:  Config{Defaults: ConfigDefaults{Providers: []string{"react"}}},
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"node": matchedDetector("node"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.IncludedProviders, []string{"react"}) {
+		t.Fatalf("unexpected included providers: %v", res.IncludedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"node", "react"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"node", "react"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
+	}
+}
+
+func TestDetectCLIIncludeOverridesConfigDefaultProviders(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
+	svc := &Service{
+		CWD:     dir,
+		Config:  Config{Defaults: ConfigDefaults{Providers: []string{"python"}}},
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"node": matchedDetector("node"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{Include: []string{"react"}})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.IncludedProviders, []string{"react"}) {
+		t.Fatalf("unexpected included providers: %v", res.IncludedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"node", "react"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"node", "react"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
+	}
+}
+
+func TestAddMergesConfigDefaultProviders(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "node_modules/\n"}
+	svc := &Service{
+		CWD:     dir,
+		Config:  Config{Defaults: ConfigDefaults{Providers: []string{"python"}}},
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+	}
+
+	res, err := svc.Add(context.Background(), AddOptions{Keys: []string{"node"}})
+	if err != nil {
+		t.Fatalf("add failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.AddedProviders, []string{"node", "python"}) {
+		t.Fatalf("unexpected added providers: %v", res.AddedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"node", "python"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"node", "python"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
+	}
+}
+
+func TestDetectAppendsConfigIgnoreRulesToManagedBlock(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "node_modules/\n"}
+	svc := &Service{
+		CWD:     dir,
+		Config:  Config{Defaults: ConfigDefaults{IgnoreRules: []string{".direnv/", "coverage.out"}}},
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"node": matchedDetector("node"),
+		},
+	}
+
+	_, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+	for _, fragment := range []string{"node_modules/", ".direnv/", "coverage.out", ".env\n.env.*\n!.env.example\n!.env.ci"} {
+		if !strings.Contains(value, fragment) {
+			t.Fatalf("missing %q in managed block\n%s", fragment, value)
+		}
+	}
+}
+
 func TestDetectFailsBeforeTemplateFetchWhenSelectionIsEmpty(t *testing.T) {
 	t.Parallel()
 

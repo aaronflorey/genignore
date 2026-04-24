@@ -102,7 +102,7 @@ func TestSearchCommandJSON(t *testing.T) {
 
 func TestDetectDefaultCommandOutputOmitsEvidence(t *testing.T) {
 	oldFactory := newCommandService
-	newCommandService = func(string) commandService {
+	newCommandService = func(string, Config) commandService {
 		return stubCommandService{detectResult: CommandResult{
 			Command:           "detect",
 			DetectedProviders: []string{"node", "react"},
@@ -136,7 +136,7 @@ func TestDetectDefaultCommandOutputOmitsEvidence(t *testing.T) {
 
 func TestAddDefaultCommandOutputShowsWarningsAndFileAction(t *testing.T) {
 	oldFactory := newCommandService
-	newCommandService = func(string) commandService {
+	newCommandService = func(string, Config) commandService {
 		return stubCommandService{addResult: CommandResult{
 			Command:                "add",
 			AddedProviders:         []string{"go"},
@@ -185,7 +185,7 @@ func TestAddDefaultCommandOutputShowsWarningsAndFileAction(t *testing.T) {
 
 func TestDetectVerboseCommandShowsEvidence(t *testing.T) {
 	oldFactory := newCommandService
-	newCommandService = func(string) commandService {
+	newCommandService = func(string, Config) commandService {
 		return stubCommandService{detectResult: CommandResult{
 			Command:        "detect",
 			FinalProviders: []string{"node"},
@@ -219,7 +219,7 @@ func TestDetectVerboseCommandShowsEvidence(t *testing.T) {
 
 func TestDetectCommandFailureReturnsNonZero(t *testing.T) {
 	oldFactory := newCommandService
-	newCommandService = func(string) commandService {
+	newCommandService = func(string, Config) commandService {
 		return stubCommandService{detectErr: errors.New("boom")}
 	}
 	t.Cleanup(func() { newCommandService = oldFactory })
@@ -238,6 +238,11 @@ func TestDetectCommandFailureReturnsNonZero(t *testing.T) {
 
 func captureRunOutput(t *testing.T, args []string) (int, string, string) {
 	t.Helper()
+	return captureRunOutputWithHome(t, args, t.TempDir())
+}
+
+func captureRunOutputWithHome(t *testing.T, args []string, home string) (int, string, string) {
+	t.Helper()
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -250,6 +255,7 @@ func captureRunOutput(t *testing.T, args []string) (int, string, string) {
 	t.Cleanup(func() {
 		_ = os.Chdir(cwd)
 	})
+	t.Setenv("HOME", home)
 
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
