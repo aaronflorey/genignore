@@ -2,7 +2,7 @@
 
 `genignore` builds and maintains a generated block inside your repository's `.gitignore`.
 
-It detects relevant ignore templates for the current project and environment, fetches merged rules from the Toptal gitignore API, and rewrites only the managed section so the rest of your file stays yours.
+It detects relevant ignore templates for the current project and environment, fetches remote rules from `github/gitignore`, and rewrites only the managed section so the rest of your file stays yours.
 
 ## What It Does
 
@@ -147,9 +147,9 @@ What that means in practice:
 
 ## Embedded Custom Templates
 
-`genignore` can bundle custom templates directly in the binary so they work without depending on remote provider support.
+`genignore` uses `github/gitignore` as its canonical remote source and keeps only a small embedded exception set for bundled templates that do not come from that upstream catalog.
 
-- Built-in custom keys: `ai-agents`, `wrangler`
+- Built-in non-GitHub keys: `ai-agents`, `wrangler`
 - `ai-agents` includes: `.agents/`, `.claude/`, `.cursor/`
 - `wrangler` includes: `.wrangler/`, `.dev.vars*`, and `!.dev.vars.example`
 - The managed block also keeps `!.env.example` and `!.env.ci` committable through its canonical env-rule section
@@ -172,7 +172,8 @@ golangci-lint run
 
 ## Notes
 
-- The Toptal gitignore API is required at runtime.
+- `github/gitignore` is the canonical runtime source for remote templates.
+- `ai-agents` and `wrangler` are narrow embedded exceptions and do not depend on GitHub support.
 - The tool scans the current directory and one level of non-ignored subdirectories.
 - If a `packages` directory exists, `detect` scans each direct `packages/*` child for provider signals but still writes only the root `.gitignore`.
 - Unsupported provider keys are reported as warnings while valid keys still proceed.
