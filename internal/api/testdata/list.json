@@ -1,20 +1,24 @@
 {
-  "node": {
-    "name": "Node",
-    "fileName": "Node.gitignore",
-    "contents": "node_modules/\n",
-    "key": "node"
-  },
-  "go": {
-    "name": "Go",
-    "fileName": "Go.gitignore",
-    "contents": "bin/\n",
-    "key": "go"
-  },
-  "macos": {
-    "name": "macOS",
-    "fileName": "macOS.gitignore",
-    "contents": ".DS_Store\n",
-    "key": "macos"
-  }
+  "tree": [
+    {
+      "path": "Go.gitignore",
+      "type": "blob"
+    },
+    {
+      "path": "Node.gitignore",
+      "type": "blob"
+    },
+    {
+      "path": "Global/macOS.gitignore",
+      "type": "blob"
+    },
+    {
+      "path": "community/JavaScript/Node.gitignore",
+      "type": "blob"
+    },
+    {
+      "path": "README.md",
+      "type": "blob"
+    }
+  ]
 }

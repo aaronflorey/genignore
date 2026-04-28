@@ -24,11 +24,13 @@ func TestClientUsesFixtures(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/list":
+		case "/catalog":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write(listFixture)
-		case "/templates/node,go":
+		case "/templates/Node.gitignore":
 			_, _ = w.Write(templateFixture)
+		case "/templates/Go.gitignore":
+			_, _ = w.Write([]byte("bin/\n"))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -36,7 +38,7 @@ func TestClientUsesFixtures(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient()
-	client.listURL = server.URL + "/list"
+	client.listURL = server.URL + "/catalog"
 	client.templateURL = server.URL + "/templates/"
 
 	list, err := client.AvailableProviders(context.Background())
@@ -54,11 +56,11 @@ func TestClientUsesFixtures(t *testing.T) {
 		t.Fatalf("expected deterministic list ordering, got %v then %v", list, listAgain)
 	}
 
-	template, err := client.FetchTemplate(context.Background(), []string{"node", "go"})
+	template, err := client.FetchTemplate(context.Background(), []string{"node"})
 	if err != nil {
 		t.Fatalf("FetchTemplate failed: %v", err)
 	}
-	if template.Content != string(templateFixture) {
+	if template.Content != strings.TrimSpace(string(templateFixture)) {
 		t.Fatalf("unexpected template content")
 	}
 }
@@ -84,15 +86,19 @@ func TestFetchTemplateReturnsStableErrorOnNonOKResponse(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/templates/node" {
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`))
+		case "/templates/Node.gitignore":
+			w.WriteHeader(http.StatusBadGateway)
+		default:
 			w.WriteHeader(http.StatusNotFound)
-			return
 		}
-		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer server.Close()
 
 	client := NewClient()
+	client.listURL = server.URL + "/catalog"
 	client.templateURL = server.URL + "/templates/"
 
 	_, err := client.FetchTemplate(context.Background(), []string{"node"})
@@ -101,45 +107,21 @@ func TestFetchTemplateReturnsStableErrorOnNonOKResponse(t *testing.T) {
 	}
 }
 
-func TestAvailableProvidersSupportsLegacyListShape(t *testing.T) {
+func TestAvailableProvidersRejectsMissingTreeResponse(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"gitignores":["node","go"]}`))
+		_, _ = w.Write([]byte(`{"entries":[]}`))
 	}))
 	defer server.Close()
 
 	client := NewClient()
 	client.listURL = server.URL
 
-	providers, err := client.AvailableProviders(context.Background())
-	if err != nil {
-		t.Fatalf("AvailableProviders failed: %v", err)
-	}
-	if !reflect.DeepEqual(providers, []string{"go", "node"}) {
-		t.Fatalf("unexpected providers: %v", providers)
-	}
-}
-
-func TestAvailableProvidersSupportsEmptyLegacyListShape(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"gitignores":[]}`))
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL
-
-	providers, err := client.AvailableProviders(context.Background())
-	if err != nil {
-		t.Fatalf("AvailableProviders failed: %v", err)
-	}
-	if !reflect.DeepEqual(providers, []string{}) {
-		t.Fatalf("unexpected providers: %v", providers)
+	_, err := client.AvailableProviders(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "decode list API response") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -221,23 +203,27 @@ func TestFetchTemplateMergesRemoteAndEmbeddedCustomTemplates(t *testing.T) {
 
 	requestPath := ""
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestPath = r.URL.Path
-		if r.URL.Path != "/templates/go" {
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"}]}`))
+		case "/templates/Go.gitignore":
+			requestPath = r.URL.Path
+			_, _ = w.Write([]byte("bin/\n"))
+		default:
 			w.WriteHeader(http.StatusNotFound)
-			return
 		}
-		_, _ = w.Write([]byte("bin/\n"))
 	}))
 	defer server.Close()
 
 	client := NewClient()
+	client.listURL = server.URL + "/catalog"
 	client.templateURL = server.URL + "/templates/"
 
 	resp, err := client.FetchTemplate(context.Background(), []string{"ai-agents", "go"})
 	if err != nil {
 		t.Fatalf("FetchTemplate failed: %v", err)
 	}
-	if requestPath != "/templates/go" {
+	if requestPath != "/templates/Go.gitignore" {
 		t.Fatalf("expected remote request to include only remote providers, got %q", requestPath)
 	}
 	if !strings.Contains(resp.Content, "bin/") {
@@ -253,23 +239,27 @@ func TestFetchTemplateMergesRemoteAndWranglerEmbeddedTemplates(t *testing.T) {
 
 	requestPath := ""
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestPath = r.URL.Path
-		if r.URL.Path != "/templates/go" {
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"}]}`))
+		case "/templates/Go.gitignore":
+			requestPath = r.URL.Path
+			_, _ = w.Write([]byte("bin/\n"))
+		default:
 			w.WriteHeader(http.StatusNotFound)
-			return
 		}
-		_, _ = w.Write([]byte("bin/\n"))
 	}))
 	defer server.Close()
 
 	client := NewClient()
+	client.listURL = server.URL + "/catalog"
 	client.templateURL = server.URL + "/templates/"
 
 	resp, err := client.FetchTemplate(context.Background(), []string{"go", "wrangler"})
 	if err != nil {
 		t.Fatalf("FetchTemplate failed: %v", err)
 	}
-	if requestPath != "/templates/go" {
+	if requestPath != "/templates/Go.gitignore" {
 		t.Fatalf("expected remote request to include only remote providers, got %q", requestPath)
 	}
 	if !strings.Contains(resp.Content, "bin/") {
@@ -277,5 +267,41 @@ func TestFetchTemplateMergesRemoteAndWranglerEmbeddedTemplates(t *testing.T) {
 	}
 	if !strings.Contains(resp.Content, ".wrangler/") {
 		t.Fatalf("expected wrangler template content in merge: %q", resp.Content)
+	}
+}
+
+func TestFetchTemplateResolvesGlobalTemplatePathsAndPreservesRequestedOrder(t *testing.T) {
+	t.Parallel()
+
+	requestPaths := make([]string, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"},{"path":"Global/macOS.gitignore","type":"blob"}]}`))
+		case "/templates/Global/macOS.gitignore":
+			requestPaths = append(requestPaths, r.URL.Path)
+			_, _ = w.Write([]byte(".DS_Store\n"))
+		case "/templates/Go.gitignore":
+			requestPaths = append(requestPaths, r.URL.Path)
+			_, _ = w.Write([]byte("bin/\n"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.listURL = server.URL + "/catalog"
+	client.templateURL = server.URL + "/templates/"
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"macos", "go"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if !reflect.DeepEqual(requestPaths, []string{"/templates/Global/macOS.gitignore", "/templates/Go.gitignore"}) {
+		t.Fatalf("unexpected request order: %v", requestPaths)
+	}
+	if resp.Content != ".DS_Store\n\nbin/" {
+		t.Fatalf("unexpected merged content: %q", resp.Content)
 	}
 }
