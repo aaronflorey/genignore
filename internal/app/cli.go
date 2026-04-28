@@ -166,7 +166,9 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 			if len(target.DetectedProviders) > 0 {
 				fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(target.DetectedProviders))
 			}
-			fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(target.FinalProviders))
+			if len(target.FinalProviders) > 0 {
+				fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(target.FinalProviders))
+			}
 			if verbose {
 				for _, detection := range target.DetectionResults {
 					if !detection.Matched && detection.Error == "" {
@@ -179,11 +181,15 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 				fmt.Printf("%s %s\n", label.Render("File:"), target.FileAction)
 			}
 		}
+		fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(result.FinalProviders))
 		for _, warning := range result.UnsupportedKeyWarnings {
 			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
 		}
 		for _, warning := range result.RemoteProviderWarnings {
 			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		}
+		if result.FileAction != "" {
+			fmt.Printf("%s %s\n", label.Render("File:"), result.FileAction)
 		}
 		return
 	}

@@ -108,24 +108,30 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 
 	targetResults := make([]TargetResult, 0, len(targetPaths))
 	detected := makeSet(nil)
-	final := makeSet(nil)
-	templateProviderCount := 0
-	fileActions := make([]gitignore.FileAction, 0, len(targetPaths))
 	for _, targetPath := range targetPaths {
-		manager := gitignore.NewManager(targetPath)
-		targetResult, detectErr := s.detectTarget(ctx, targetPath, manager, include, exclude, opts.DryRun)
+		targetResult, detectErr := s.scanTarget(ctx, targetPath)
 		if detectErr != nil {
 			return CommandResult{}, detectErr
 		}
 		for _, key := range targetResult.DetectedProviders {
 			detected[key] = struct{}{}
 		}
-		for _, key := range targetResult.FinalProviders {
-			final[key] = struct{}{}
-		}
-		templateProviderCount += targetResult.TemplateProviderCount
-		fileActions = append(fileActions, targetResult.FileAction)
 		targetResults = append(targetResults, targetResult)
+	}
+
+	finalProviders, err := s.detectFinalProviders(mapKeysSorted(detected), s.Manager, include, exclude)
+	if err != nil {
+		return CommandResult{}, err
+	}
+
+	template, err := s.Client.FetchTemplate(ctx, finalProviders)
+	if err != nil {
+		return CommandResult{}, err
+	}
+	block := gitignore.BuildManagedBlock(finalProviders, template.Content, s.Config.Defaults.IgnoreRules)
+	action, err := s.Manager.UpsertManagedBlock(block, opts.DryRun)
+	if err != nil {
+		return CommandResult{}, err
 	}
 
 	return CommandResult{
@@ -135,49 +141,23 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 		DetectedProviders:      mapKeysSorted(detected),
 		IncludedProviders:      include,
 		ExcludedProviders:      exclude,
-		FinalProviders:         mapKeysSorted(final),
+		FinalProviders:         finalProviders,
 		UnsupportedKeyWarnings: warnings,
 		RemoteProviderWarnings: remoteWarnings,
-		FileAction:             aggregateFileAction(fileActions),
-		TemplateProviderCount:  templateProviderCount,
+		FileAction:             action,
+		TemplateProviderCount:  len(template.Providers),
 	}, nil
 }
 
 func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *gitignore.Manager, include []string, exclude []string, dryRun bool) (TargetResult, error) {
-	detections := make([]provider.Result, 0, len(s.Detectors))
-	detected := makeSet(nil)
-	for _, entry := range sortedDetectors(s.Detectors) {
-		result := entry.detector.Detect(ctx, targetPath)
-		if result.Key == "" {
-			result.Key = entry.key
-		}
-		detections = append(detections, result)
-		if result.Matched {
-			detected[result.Key] = struct{}{}
-		}
-	}
-	sortDetectionResults(detections)
-
-	existingManagedProviders, err := manager.ReadManagedProviders()
+	targetResult, err := s.scanTarget(ctx, targetPath)
 	if err != nil {
 		return TargetResult{}, err
 	}
 
-	final := makeSet(mapKeysSorted(detected))
-	for _, key := range existingManagedProviders {
-		if shouldCarryForwardDetectedManagedProvider(key) {
-			final[key] = struct{}{}
-		}
-	}
-	for _, key := range include {
-		final[key] = struct{}{}
-	}
-	for _, key := range exclude {
-		delete(final, key)
-	}
-	finalProviders := mapKeysSorted(final)
-	if len(finalProviders) == 0 {
-		return TargetResult{}, fmt.Errorf("no providers selected after include/exclude")
+	finalProviders, err := s.detectFinalProviders(targetResult.DetectedProviders, manager, include, exclude)
+	if err != nil {
+		return TargetResult{}, err
 	}
 
 	template, err := s.Client.FetchTemplate(ctx, finalProviders)
@@ -197,12 +177,66 @@ func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *
 
 	return TargetResult{
 		Path:                  relPath,
-		DetectedProviders:     mapKeysSorted(detected),
+		DetectedProviders:     targetResult.DetectedProviders,
 		FinalProviders:        finalProviders,
-		DetectionResults:      detections,
+		DetectionResults:      targetResult.DetectionResults,
 		FileAction:            action,
 		TemplateProviderCount: len(template.Providers),
 	}, nil
+}
+
+func (s *Service) scanTarget(ctx context.Context, targetPath string) (TargetResult, error) {
+	detections := make([]provider.Result, 0, len(s.Detectors))
+	detected := makeSet(nil)
+	for _, entry := range sortedDetectors(s.Detectors) {
+		result := entry.detector.Detect(ctx, targetPath)
+		if result.Key == "" {
+			result.Key = entry.key
+		}
+		detections = append(detections, result)
+		if result.Matched {
+			detected[result.Key] = struct{}{}
+		}
+	}
+	sortDetectionResults(detections)
+
+	relPath, relErr := filepath.Rel(s.CWD, targetPath)
+	if relErr != nil {
+		relPath = targetPath
+	}
+
+	return TargetResult{
+		Path:              relPath,
+		DetectedProviders: mapKeysSorted(detected),
+		DetectionResults:  detections,
+	}, nil
+}
+
+func (s *Service) detectFinalProviders(detectedProviders []string, manager *gitignore.Manager, include []string, exclude []string) ([]string, error) {
+	existingManagedProviders, err := manager.ReadManagedProviders()
+	if err != nil {
+		return nil, err
+	}
+
+	final := makeSet(detectedProviders)
+	for _, key := range existingManagedProviders {
+		if shouldCarryForwardDetectedManagedProvider(key) {
+			final[key] = struct{}{}
+		}
+	}
+	for _, key := range include {
+		final[key] = struct{}{}
+	}
+	for _, key := range exclude {
+		delete(final, key)
+	}
+
+	finalProviders := mapKeysSorted(final)
+	if len(finalProviders) == 0 {
+		return nil, fmt.Errorf("no providers selected after include/exclude")
+	}
+
+	return finalProviders, nil
 }
 
 func detectTargetPaths(cwd string) ([]string, error) {
@@ -224,26 +258,6 @@ func detectTargetPaths(cwd string) ([]string, error) {
 	}
 	sort.Strings(targets)
 	return targets, nil
-}
-
-func aggregateFileAction(actions []gitignore.FileAction) gitignore.FileAction {
-	if len(actions) == 0 {
-		return ""
-	}
-
-	allCreated := true
-	for _, action := range actions {
-		if action == gitignore.FileActionDryRun {
-			return gitignore.FileActionDryRun
-		}
-		if action != gitignore.FileActionCreated {
-			allCreated = false
-		}
-	}
-	if allCreated {
-		return gitignore.FileActionCreated
-	}
-	return gitignore.FileActionUpdated
 }
 
 func sortedDetectors(detectors map[string]provider.Detector) []namedDetector {

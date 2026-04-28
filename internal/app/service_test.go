@@ -747,7 +747,7 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	}
 }
 
-func TestDetectFansOutAcrossPackagesChildrenAndSkipsRootGitignore(t *testing.T) {
+func TestDetectScansPackagesChildrenAndWritesSingleRootGitignore(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -798,39 +798,87 @@ func TestDetectFansOutAcrossPackagesChildrenAndSkipsRootGitignore(t *testing.T) 
 	if len(res.Targets) != 2 {
 		t.Fatalf("expected two target results, got %d", len(res.Targets))
 	}
+	if !reflect.DeepEqual(res.DetectedProviders, []string{"go", "node"}) {
+		t.Fatalf("unexpected aggregate detected providers: %v", res.DetectedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"go", "node"}) {
+		t.Fatalf("unexpected aggregate final providers: %v", res.FinalProviders)
+	}
 	if res.Targets[0].Path != filepath.Join("packages", "api") {
 		t.Fatalf("unexpected first target path: %s", res.Targets[0].Path)
 	}
 	if res.Targets[1].Path != filepath.Join("packages", "web") {
 		t.Fatalf("unexpected second target path: %s", res.Targets[1].Path)
 	}
-	if !reflect.DeepEqual(res.Targets[0].FinalProviders, []string{"go"}) {
-		t.Fatalf("unexpected api final providers: %v", res.Targets[0].FinalProviders)
+	if !reflect.DeepEqual(res.Targets[0].DetectedProviders, []string{"go"}) {
+		t.Fatalf("unexpected api detected providers: %v", res.Targets[0].DetectedProviders)
 	}
-	if !reflect.DeepEqual(res.Targets[1].FinalProviders, []string{"node"}) {
-		t.Fatalf("unexpected web final providers: %v", res.Targets[1].FinalProviders)
+	if !reflect.DeepEqual(res.Targets[1].DetectedProviders, []string{"node"}) {
+		t.Fatalf("unexpected web detected providers: %v", res.Targets[1].DetectedProviders)
 	}
-	if len(client.requests) != 2 {
-		t.Fatalf("expected one template request per package, got %d", len(client.requests))
+	if len(res.Targets[0].FinalProviders) != 0 || len(res.Targets[1].FinalProviders) != 0 {
+		t.Fatalf("expected package targets to remain scan-only, got %+v", res.Targets)
 	}
-	if !reflect.DeepEqual(client.requests[0], []string{"go"}) {
-		t.Fatalf("unexpected first request providers: %v", client.requests[0])
+	if res.Targets[0].FileAction != "" || res.Targets[1].FileAction != "" {
+		t.Fatalf("expected package targets to avoid file actions, got %+v", res.Targets)
 	}
-	if !reflect.DeepEqual(client.requests[1], []string{"node"}) {
-		t.Fatalf("unexpected second request providers: %v", client.requests[1])
+	if len(client.requests) != 1 {
+		t.Fatalf("expected a single template request for the root managed block, got %d", len(client.requests))
+	}
+	if !reflect.DeepEqual(client.requests[0], []string{"go", "node"}) {
+		t.Fatalf("unexpected root request providers: %v", client.requests[0])
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); !os.IsNotExist(err) {
-		t.Fatalf("expected root .gitignore to remain untouched")
+	content, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("expected root .gitignore to be written: %v", err)
+	}
+	if !strings.Contains(string(content), gitignore.StartMarker) {
+		t.Fatalf("expected managed block markers in root .gitignore")
 	}
 	for _, packagePath := range []string{apiDir, webDir} {
-		content, readErr := os.ReadFile(filepath.Join(packagePath, ".gitignore"))
-		if readErr != nil {
-			t.Fatalf("expected package .gitignore to be written in %s: %v", packagePath, readErr)
+		if _, err := os.Stat(filepath.Join(packagePath, ".gitignore")); !os.IsNotExist(err) {
+			t.Fatalf("expected package .gitignore to remain untouched in %s", packagePath)
 		}
-		if !strings.Contains(string(content), gitignore.StartMarker) {
-			t.Fatalf("expected managed block markers in %s", packagePath)
-		}
+	}
+}
+
+func TestDetectPackagesModePreservesRootManagedOSProviders(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "packages", "api"), 0o755); err != nil {
+		t.Fatalf("create packages directory failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "packages", "api", "go.mod"), []byte("module example.com/api\n"), 0o644); err != nil {
+		t.Fatalf("write api go.mod failed: %v", err)
+	}
+
+	manager := gitignore.NewManager(dir)
+	seed := gitignore.BuildManagedBlock([]string{"macos"}, ".DS_Store\n")
+	if _, err := manager.UpsertManagedBlock(seed, false); err != nil {
+		t.Fatalf("seed failed: %v", err)
+	}
+
+	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
+	svc := &Service{
+		CWD:     dir,
+		Client:  client,
+		Manager: manager,
+		Detectors: map[string]provider.Detector{
+			"go": matchedDetector("go"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"go", "macos"}) {
+		t.Fatalf("expected root managed OS provider to be preserved, got %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"go", "macos"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
 	}
 }
 
