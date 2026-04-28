@@ -52,7 +52,7 @@ func normalizeTemplate(template string, extraRuleSources ...[]string) string {
 	ruleLines := make(map[string]struct{})
 
 	for _, line := range lines {
-		if isToptalBoilerplateComment(line) {
+		if isGeneratedSourceComment(line) {
 			continue
 		}
 		if canonical, ok := canonicalizeEnvRule(line); ok {
@@ -169,7 +169,7 @@ func canonicalizeEnvRule(line string) (string, bool) {
 	return trimmed, true
 }
 
-func isToptalBoilerplateComment(line string) bool {
+func isGeneratedSourceComment(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	if !strings.HasPrefix(trimmed, "# ") {
 		return false
@@ -177,7 +177,9 @@ func isToptalBoilerplateComment(line string) bool {
 
 	return strings.HasPrefix(trimmed, "# Created by https://www.toptal.com/developers/gitignore/api/") ||
 		strings.HasPrefix(trimmed, "# Edit at https://www.toptal.com/developers/gitignore?templates=") ||
-		strings.HasPrefix(trimmed, "# End of https://www.toptal.com/developers/gitignore/api/")
+		strings.HasPrefix(trimmed, "# End of https://www.toptal.com/developers/gitignore/api/") ||
+		strings.HasPrefix(trimmed, "# Source: github/gitignore/") ||
+		strings.HasPrefix(trimmed, "# Source: https://raw.githubusercontent.com/github/gitignore/")
 }
 
 func ParseManagedProviders(content string) []string {

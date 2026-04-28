@@ -503,14 +503,11 @@ func TestJetBrainsLanguageInferenceDoesNotMatchWithoutMatchingSignalForNewIDEPat
 	}
 }
 
-func TestRegistryIncludesAutoDetectableSupportedJetBrainsIDEs(t *testing.T) {
+func TestRegistryIncludesAutoDetectableJetBrainsIDEs(t *testing.T) {
 	t.Parallel()
 
 	registry := Registry()
 	for _, key := range []string{"androidstudio", "appcode", "clion", "goland", "intellij", "jetbrains", "phpstorm", "pycharm", "rider", "rubymine", "webstorm"} {
-		if !IsSupported(key) {
-			t.Fatalf("expected %q to be supported", key)
-		}
 		detector, ok := registry[key]
 		if !ok {
 			t.Fatalf("expected registry detector for %q", key)
@@ -520,6 +517,15 @@ func TestRegistryIncludesAutoDetectableSupportedJetBrainsIDEs(t *testing.T) {
 		}
 		if len(ideInstallCandidatesForKey(key)) == 0 {
 			t.Fatalf("expected non-empty install candidates for %q", key)
+		}
+	}
+
+	if !IsSupported("jetbrains") {
+		t.Fatalf("expected %q to remain supported", "jetbrains")
+	}
+	for _, key := range []string{"androidstudio", "appcode", "clion", "goland", "intellij", "phpstorm", "pycharm", "rider", "rubymine", "webstorm"} {
+		if IsSupported(key) {
+			t.Fatalf("expected %q to be unsupported under the GitHub-backed contract", key)
 		}
 	}
 }
@@ -703,15 +709,23 @@ func TestRegistryIncludesRequestedLanguageDetectors(t *testing.T) {
 
 	registry := Registry()
 	for _, key := range []string{"terraform", "rust", "java", "kotlin", "dotnetcore", "csharp", "dart", "flutter", "swift", "xcode", "android", "ruby", "maven", "rails", "jekyll", "symfony"} {
-		if !IsSupported(key) {
-			t.Fatalf("expected %q to be supported", key)
-		}
 		detector, ok := registry[key]
 		if !ok {
 			t.Fatalf("expected registry detector for %q", key)
 		}
 		if detector == nil {
 			t.Fatalf("detector for %q is nil", key)
+		}
+	}
+
+	for _, key := range []string{"terraform", "rust", "java", "kotlin", "dart", "flutter", "swift", "xcode", "android", "ruby", "maven", "rails", "jekyll", "symfony"} {
+		if !IsSupported(key) {
+			t.Fatalf("expected %q to be supported", key)
+		}
+	}
+	for _, key := range []string{"dotnetcore", "csharp"} {
+		if IsSupported(key) {
+			t.Fatalf("expected %q to be unsupported under the GitHub-backed contract", key)
 		}
 	}
 }

@@ -6,8 +6,8 @@ import (
 	"github.com/aaronflorey/genignore/internal/customtemplate"
 )
 
-var builtinSupportedKeys = []string{
-	"android", "androidstudio", "angular", "ansible", "ansibletower", "appcode", "appcode+all", "appcode+iml", "archive", "archives", "archlinuxpackages", "asdf", "aspnetcore", "astro", "audio", "azurefunctions", "azurite", "backup", "basic", "blender", "bower", "c", "c++", "cake", "certificates", "chocolatey", "clean", "clion", "clion+all", "clion+iml", "clojure", "cmake", "cocoapods", "codeigniter", "codeio", "codesniffer", "composer", "compressed", "compressedarchive", "compression", "cordova", "crystal", "csharp", "cvs", "dart", "data", "database", "dbeaver", "deno", "diff", "direnv", "diskimage", "django", "docz", "dotenv", "dotfilessh", "dotnetcore", "dotsettings", "dreamweaver", "dropbox", "drupal", "drupal7", "drupal8", "eclipse", "elasticbeanstalk", "elixir", "emacs", "erlang", "executable", "fastlane", "firebase", "fish", "flask", "flatpak", "flutter", "font", "games", "gatsby", "gis", "git", "gitbook", "go", "godot", "goland", "goland+all", "goland+iml", "gpg", "gradle", "groovy", "grunt", "haskell", "helm", "homebrew", "images", "intellij", "intellij+all", "intellij+iml", "java", "jekyll", "jetbrains", "jetbrains+all", "jetbrains+iml", "joomla", "justcode", "kotlin", "lamp", "laravel", "latex", "less", "linux", "localstack", "lua", "macos", "maven", "nanoc", "nextjs", "nim", "node", "now", "nuxtjs", "nwjs", "objective-c", "opencv", "php-cs-fixer", "phpcodesniffer", "phpstorm", "phpstorm+all", "phpstorm+iml", "phpunit", "powershell", "putty", "pycharm", "pycharm+all", "pycharm+iml", "pydev", "python", "rails", "react", "replit", "rider", "ruby", "rubymine", "rubymine+all", "rubymine+iml", "rust", "rust-analyzer", "sass", "serverless", "snyk", "spreadsheet", "ssh", "sublimetext", "svelte", "svn", "swift", "swiftpackagemanager", "symfony", "terraform", "terragrunt", "test", "text", "venv", "vercel", "video", "vim", "virtualenv", "visualstudio", "visualstudiocode", "vue", "vuejs", "waf", "web", "webstorm", "webstorm+all", "webstorm+iml", "windows", "wordpress", "xcode", "yarn", "zig", "zsh",
+var remoteSupportedKeys = []string{
+	"actionscript", "ada", "adventuregamestudio", "agda", "al", "android", "angular", "anjuta", "ansible", "appceleratortitanium", "appengine", "archives", "archlinuxpackages", "autotools", "backup", "ballerina", "bazaar", "bricxcc", "bun", "c", "c++", "cakephp", "calabash", "cfwheels", "chefcookbook", "clojure", "cloud9", "cmake", "codeigniter", "codekit", "commonlisp", "composer", "concrete5", "coq", "craftcms", "cuda", "cursor", "cvs", "d", "dart", "darteditor", "delphi", "deno", "diff", "dm", "dotnet", "dreamweaver", "dropbox", "drupal", "eagle", "eclipse", "ecu.test", "eiffelstudio", "elisp", "elixir", "elm", "emacs", "ensime", "episerver", "erlang", "espresso", "expressionengine", "extjs", "fancy", "finale", "firebase", "flaxengine", "flexbuilder", "flutter", "forcedotcom", "fortran", "fuelphp", "gcov", "gitbook", "githubpages", "gleam", "go", "godot", "gpg", "gradle", "grails", "gwt", "haskell", "haxe", "hip", "iar", "idris", "igorpro", "images", "java", "jboss", "jdeveloper", "jekyll", "jenkins_home", "jenv", "jetbrains", "joomla", "julia", "katalon", "kate", "kdevelop4", "kicad", "kohana", "kotlin", "labview", "langchain", "laravel", "lazarus", "lean", "lefthook", "leiningen", "lemonstand", "libreoffice", "lilypond", "linux", "lithium", "lua", "luau", "lyx", "macos", "magento", "matlab", "maven", "mercurial", "mercury", "metals", "metaprogrammingsystem", "microsoftoffice", "mise", "modelica", "modelsim", "momentics", "monodevelop", "moonbit", "nanoc", "nestjs", "netbeans", "nextjs", "nim", "ninja", "nix", "node", "notepadpp", "objective-c", "ocaml", "octave", "ohmyopenagent", "opa", "opencart", "oracleforms", "otto", "packer", "patch", "perl", "phalcon", "platformio", "playframework", "plone", "prestashop", "processing", "psoccreator", "purescript", "putty", "python", "qooxdoo", "qt", "r", "racket", "rails", "raku", "redcar", "redis", "rescript", "rhodesrhomobile", "ros", "ruby", "rust", "salesforce", "sass", "sbt", "scala", "scheme", "scons", "scrivener", "sdcc", "seamgen", "sketchup", "slickedit", "smalltalk", "solidity-remix", "solidworks", "ssdt-sqlproj", "stata", "stella", "stm32cubeide", "sublimetext", "sugarcrm", "svn", "swift", "symfony", "symphonycms", "syncthing", "synopsysvcs", "tags", "terraform", "testcomplete", "tex", "textmate", "textpattern", "tortoisegit", "turbogears2", "twincat3", "typo3", "unity", "unrealengine", "vagrant", "vba", "vim", "virtualenv", "virtuoso", "visualstudio", "visualstudiocode", "vvvv", "waf", "webmethods", "windows", "wordpress", "xcode", "xilinxise", "xojo", "yeoman", "yii", "zed", "zendframework", "zephir", "zig",
 }
 
 var (
@@ -16,14 +16,14 @@ var (
 )
 
 func init() {
-	builtinSet := make(map[string]struct{}, len(builtinSupportedKeys))
-	for _, key := range builtinSupportedKeys {
-		builtinSet[key] = struct{}{}
+	remoteSet := make(map[string]struct{}, len(remoteSupportedKeys))
+	for _, key := range remoteSupportedKeys {
+		remoteSet[key] = struct{}{}
 	}
 
-	SupportedKeys = append([]string(nil), builtinSupportedKeys...)
+	SupportedKeys = append([]string(nil), remoteSupportedKeys...)
 	for _, key := range customtemplate.ProviderKeys() {
-		if _, exists := builtinSet[key]; exists {
+		if _, exists := remoteSet[key]; exists {
 			panic("embedded custom template key collides with remote provider key: " + key)
 		}
 		SupportedKeys = append(SupportedKeys, key)
@@ -38,7 +38,7 @@ func init() {
 }
 
 func RemoteSupportedKeys() []string {
-	return append([]string(nil), builtinSupportedKeys...)
+	return append([]string(nil), remoteSupportedKeys...)
 }
 
 func IsSupported(key string) bool {

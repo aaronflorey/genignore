@@ -253,12 +253,48 @@ func TestRemoteProviderDriftWarning(t *testing.T) {
 	if len(res.RemoteProviderWarnings) == 0 {
 		t.Fatalf("expected remote provider drift warning")
 	}
-	if !reflect.DeepEqual(res.RemoteProviderWarnings[:3], []string{
-		"supported provider missing remotely: android",
-		"supported provider missing remotely: androidstudio",
+	for _, warning := range []string{
 		"supported provider missing remotely: angular",
-	}) {
-		t.Fatalf("unexpected warning prefix: %v", res.RemoteProviderWarnings[:3])
+		"supported provider missing remotely: go",
+	} {
+		if !containsString(res.RemoteProviderWarnings, warning) {
+			t.Fatalf("expected warning %q in %v", warning, res.RemoteProviderWarnings)
+		}
+	}
+	for _, warning := range []string{
+		"supported provider missing remotely: ai-agents",
+		"supported provider missing remotely: wrangler",
+	} {
+		if containsString(res.RemoteProviderWarnings, warning) {
+			t.Fatalf("did not expect embedded exception warning %q in %v", warning, res.RemoteProviderWarnings)
+		}
+	}
+}
+
+func TestDetectAcceptsEmbeddedExceptionProvider(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: []string{"node"}, template: "generated\n"}
+	svc := &Service{
+		CWD:       dir,
+		Client:    client,
+		Manager:   gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{"node": matchedDetector("node")},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{Include: []string{"wrangler"}})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.IncludedProviders, []string{"wrangler"}) {
+		t.Fatalf("unexpected included providers: %v", res.IncludedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"node", "wrangler"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if len(res.UnsupportedKeyWarnings) != 0 {
+		t.Fatalf("unexpected unsupported warnings: %v", res.UnsupportedKeyWarnings)
 	}
 }
 
@@ -445,8 +481,8 @@ func TestDetectAppliesIncludeExcludeWithSortedSelections(t *testing.T) {
 	}
 
 	res, err := svc.Detect(context.Background(), DetectOptions{
-		Include: []string{"react", "node", "bad"},
-		Exclude: []string{"python", "react", "unknown"},
+		Include: []string{"angular", "node", "bad"},
+		Exclude: []string{"python", "angular", "unknown"},
 	})
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
@@ -455,10 +491,10 @@ func TestDetectAppliesIncludeExcludeWithSortedSelections(t *testing.T) {
 	if !reflect.DeepEqual(res.DetectedProviders, []string{"go", "node", "python"}) {
 		t.Fatalf("unexpected detected providers: %v", res.DetectedProviders)
 	}
-	if !reflect.DeepEqual(res.IncludedProviders, []string{"node", "react"}) {
+	if !reflect.DeepEqual(res.IncludedProviders, []string{"angular", "node"}) {
 		t.Fatalf("unexpected included providers: %v", res.IncludedProviders)
 	}
-	if !reflect.DeepEqual(res.ExcludedProviders, []string{"python", "react"}) {
+	if !reflect.DeepEqual(res.ExcludedProviders, []string{"angular", "python"}) {
 		t.Fatalf("unexpected excluded providers: %v", res.ExcludedProviders)
 	}
 	if !reflect.DeepEqual(res.FinalProviders, []string{"go", "node"}) {
@@ -479,7 +515,7 @@ func TestDetectUsesConfigDefaultProvidersWhenCLIIncludeMissing(t *testing.T) {
 	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
 	svc := &Service{
 		CWD:     dir,
-		Config:  Config{Defaults: ConfigDefaults{Providers: []string{"react"}}},
+		Config:  Config{Defaults: ConfigDefaults{Providers: []string{"angular"}}},
 		Client:  client,
 		Manager: gitignore.NewManager(dir),
 		Detectors: map[string]provider.Detector{
@@ -491,13 +527,13 @@ func TestDetectUsesConfigDefaultProvidersWhenCLIIncludeMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
 	}
-	if !reflect.DeepEqual(res.IncludedProviders, []string{"react"}) {
+	if !reflect.DeepEqual(res.IncludedProviders, []string{"angular"}) {
 		t.Fatalf("unexpected included providers: %v", res.IncludedProviders)
 	}
-	if !reflect.DeepEqual(res.FinalProviders, []string{"node", "react"}) {
+	if !reflect.DeepEqual(res.FinalProviders, []string{"angular", "node"}) {
 		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
 	}
-	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"node", "react"}) {
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"angular", "node"}) {
 		t.Fatalf("unexpected template requests: %v", client.requests)
 	}
 }
@@ -517,17 +553,47 @@ func TestDetectCLIIncludeOverridesConfigDefaultProviders(t *testing.T) {
 		},
 	}
 
-	res, err := svc.Detect(context.Background(), DetectOptions{Include: []string{"react"}})
+	res, err := svc.Detect(context.Background(), DetectOptions{Include: []string{"angular"}})
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
 	}
-	if !reflect.DeepEqual(res.IncludedProviders, []string{"react"}) {
+	if !reflect.DeepEqual(res.IncludedProviders, []string{"angular"}) {
 		t.Fatalf("unexpected included providers: %v", res.IncludedProviders)
 	}
-	if !reflect.DeepEqual(res.FinalProviders, []string{"node", "react"}) {
+	if !reflect.DeepEqual(res.FinalProviders, []string{"angular", "node"}) {
 		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
 	}
-	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"node", "react"}) {
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"angular", "node"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
+	}
+}
+
+func TestDetectDropsUnsupportedMatchedProvidersFromFinalSelection(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
+	svc := &Service{
+		CWD:     dir,
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"node":  matchedDetector("node"),
+			"react": matchedDetector("react"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.DetectedProviders, []string{"node"}) {
+		t.Fatalf("unexpected detected providers: %v", res.DetectedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"node"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"node"}) {
 		t.Fatalf("unexpected template requests: %v", client.requests)
 	}
 }
@@ -906,4 +972,13 @@ func TestAddRemainsSingleTargetWhenPackagesDirectoryExists(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "packages", "api", ".gitignore")); !os.IsNotExist(err) {
 		t.Fatalf("expected add to avoid writing package .gitignore")
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

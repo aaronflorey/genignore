@@ -24,6 +24,13 @@ const noisyToptalTemplate = `# Created by https://www.toptal.com/developers/giti
 # End of https://www.toptal.com/developers/gitignore/api/go,macos
 `
 
+const noisyGitHubTemplate = `# Source: github/gitignore/Go.gitignore
+# Source: https://raw.githubusercontent.com/github/gitignore/main/Global/macOS.gitignore
+
+bin/
+.DS_Store
+`
+
 func TestBuildManagedBlockStripsToptalBoilerplateComments(t *testing.T) {
 	t.Parallel()
 
@@ -73,6 +80,25 @@ func TestBuildManagedBlockIsStableForCleanTemplate(t *testing.T) {
 
 	if first != second {
 		t.Fatalf("expected stable managed block output\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}
+
+func TestBuildManagedBlockStripsGitHubSourceComments(t *testing.T) {
+	t.Parallel()
+
+	block := BuildManagedBlock([]string{"go", "macos"}, noisyGitHubTemplate)
+
+	for _, unwanted := range []string{
+		"# Source: github/gitignore/Go.gitignore",
+		"# Source: https://raw.githubusercontent.com/github/gitignore/main/Global/macOS.gitignore",
+	} {
+		if strings.Contains(block, unwanted) {
+			t.Fatalf("expected managed block to strip %q\n%s", unwanted, block)
+		}
+	}
+
+	if !strings.Contains(block, "bin/") || !strings.Contains(block, ".DS_Store") {
+		t.Fatalf("expected managed block to preserve template rules\n%s", block)
 	}
 }
 

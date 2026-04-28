@@ -207,7 +207,7 @@ func (s *Service) scanTarget(ctx context.Context, targetPath string) (TargetResu
 
 	return TargetResult{
 		Path:              relPath,
-		DetectedProviders: mapKeysSorted(detected),
+		DetectedProviders: filterSupportedKeys(mapKeysSorted(detected)),
 		DetectionResults:  detections,
 	}, nil
 }
@@ -298,6 +298,7 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 	if err != nil {
 		return CommandResult{}, err
 	}
+	existing = filterSupportedKeys(existing)
 	final := makeSet(existing)
 	added := make([]string, 0)
 	for _, key := range keys {
@@ -348,6 +349,16 @@ func sanitizeKeys(keys []string) ([]string, []string) {
 	slices.Sort(warnings)
 	clean := mapKeysSorted(set)
 	return clean, warnings
+}
+
+func filterSupportedKeys(keys []string) []string {
+	filtered := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if provider.IsSupported(key) {
+			filtered = append(filtered, key)
+		}
+	}
+	return filtered
 }
 
 func remoteDiffWarnings(remote map[string]struct{}) []string {

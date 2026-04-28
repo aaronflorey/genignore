@@ -16,6 +16,22 @@ func TestEmbeddedCustomProviderIsSupported(t *testing.T) {
 	}
 }
 
+func TestGitHubBackedKeysAreSupported(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"go", "macos", "nextjs", "visualstudiocode"} {
+		if !IsSupported(key) {
+			t.Fatalf("expected GitHub-backed provider key %q to be supported", key)
+		}
+	}
+
+	for _, key := range []string{"react", "dotnetcore", "androidstudio"} {
+		if IsSupported(key) {
+			t.Fatalf("expected legacy non-GitHub provider key %q to be unsupported", key)
+		}
+	}
+}
+
 func TestRemoteSupportedKeysExcludeEmbeddedCustomProviders(t *testing.T) {
 	t.Parallel()
 
