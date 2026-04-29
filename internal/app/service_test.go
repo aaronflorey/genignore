@@ -813,7 +813,7 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	}
 }
 
-func TestDetectScansPackagesChildrenAndWritesSingleRootGitignore(t *testing.T) {
+func TestDetectIgnoresPackagesChildrenAndWritesSingleRootGitignore(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -861,37 +861,19 @@ func TestDetectScansPackagesChildrenAndWritesSingleRootGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
 	}
-	if len(res.Targets) != 2 {
-		t.Fatalf("expected two target results, got %d", len(res.Targets))
+	if len(res.Targets) != 0 {
+		t.Fatalf("expected single-directory detect without target fanout, got %+v", res.Targets)
 	}
-	if !reflect.DeepEqual(res.DetectedProviders, []string{"go", "node"}) {
-		t.Fatalf("unexpected aggregate detected providers: %v", res.DetectedProviders)
+	if !reflect.DeepEqual(res.DetectedProviders, []string{"go"}) {
+		t.Fatalf("expected root-only detected providers, got %v", res.DetectedProviders)
 	}
-	if !reflect.DeepEqual(res.FinalProviders, []string{"go", "node"}) {
-		t.Fatalf("unexpected aggregate final providers: %v", res.FinalProviders)
-	}
-	if res.Targets[0].Path != filepath.Join("packages", "api") {
-		t.Fatalf("unexpected first target path: %s", res.Targets[0].Path)
-	}
-	if res.Targets[1].Path != filepath.Join("packages", "web") {
-		t.Fatalf("unexpected second target path: %s", res.Targets[1].Path)
-	}
-	if !reflect.DeepEqual(res.Targets[0].DetectedProviders, []string{"go"}) {
-		t.Fatalf("unexpected api detected providers: %v", res.Targets[0].DetectedProviders)
-	}
-	if !reflect.DeepEqual(res.Targets[1].DetectedProviders, []string{"node"}) {
-		t.Fatalf("unexpected web detected providers: %v", res.Targets[1].DetectedProviders)
-	}
-	if len(res.Targets[0].FinalProviders) != 0 || len(res.Targets[1].FinalProviders) != 0 {
-		t.Fatalf("expected package targets to remain scan-only, got %+v", res.Targets)
-	}
-	if res.Targets[0].FileAction != "" || res.Targets[1].FileAction != "" {
-		t.Fatalf("expected package targets to avoid file actions, got %+v", res.Targets)
+	if !reflect.DeepEqual(res.FinalProviders, []string{"go"}) {
+		t.Fatalf("expected root-only final providers, got %v", res.FinalProviders)
 	}
 	if len(client.requests) != 1 {
 		t.Fatalf("expected a single template request for the root managed block, got %d", len(client.requests))
 	}
-	if !reflect.DeepEqual(client.requests[0], []string{"go", "node"}) {
+	if !reflect.DeepEqual(client.requests[0], []string{"go"}) {
 		t.Fatalf("unexpected root request providers: %v", client.requests[0])
 	}
 
@@ -909,7 +891,7 @@ func TestDetectScansPackagesChildrenAndWritesSingleRootGitignore(t *testing.T) {
 	}
 }
 
-func TestDetectPackagesModePreservesRootManagedOSProviders(t *testing.T) {
+func TestDetectPreservesRootManagedOSProvidersWhenPackagesDirectoryExists(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -942,6 +924,9 @@ func TestDetectPackagesModePreservesRootManagedOSProviders(t *testing.T) {
 	}
 	if !reflect.DeepEqual(res.FinalProviders, []string{"go", "macos"}) {
 		t.Fatalf("expected root managed OS provider to be preserved, got %v", res.FinalProviders)
+	}
+	if len(res.Targets) != 0 {
+		t.Fatalf("expected single-directory detect without target fanout, got %+v", res.Targets)
 	}
 	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"go", "macos"}) {
 		t.Fatalf("unexpected template requests: %v", client.requests)

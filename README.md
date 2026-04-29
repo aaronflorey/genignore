@@ -7,7 +7,6 @@ It detects relevant ignore templates for the current project and environment, fe
 ## What It Does
 
 - Detects ignore templates from the current directory, one-level non-ignored subdirectories, OS, and installed tools.
-- Scans direct `packages/*` children for provider signals when a `packages` directory exists.
 - Lets you add extra templates explicitly when detection is not enough.
 - Supports embedded custom templates that are bundled in the binary.
 - Keeps provider ordering deterministic so repeated runs stay stable.
@@ -125,8 +124,7 @@ What that means in practice:
 `detect`
 
 - Replaces the managed provider set with `detected + include - exclude`.
-- If `./packages` exists and has direct child directories, `detect` scans each direct child for provider signals and merges them into one root-managed provider set.
-- In `packages/*` scan mode, `detect` still writes only the root `.gitignore` managed block.
+- Detects only from the current working directory and the detector-specific one-level signal scan rooted there.
 - Fails if the final provider set is empty.
 - Supports `--dry-run`, `--json`, and `--verbose`.
 
@@ -175,7 +173,6 @@ golangci-lint run
 - `github/gitignore` is the canonical runtime source for remote templates.
 - `ai-agents` and `wrangler` are narrow embedded exceptions and do not depend on GitHub support.
 - The tool scans the current directory and one level of non-ignored subdirectories.
-- If a `packages` directory exists, `detect` scans each direct `packages/*` child for provider signals but still writes only the root `.gitignore`.
 - Unsupported provider keys are reported as warnings while valid keys still proceed.
 - Re-running equivalent commands should not create unnecessary `.gitignore` churn.
 - Node detection treats `package.json`, `bun.lock`, and `bun.lockb` as project signals.

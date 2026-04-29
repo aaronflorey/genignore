@@ -7,17 +7,9 @@ This plan replaces the older PRD and focuses on the next actionable improvements
 - The CLI already implements `detect`, `add`, `list`, and `search`.
 - The implementation is split across `internal/app`, `internal/gitignore`, `internal/provider`, and `internal/api`.
 - The codebase already has targeted tests for API, provider detection, JSON output, CLI behavior, and managed block updates.
-- `detect` currently supports `packages/*` fanout, which conflicts with the documented project constraint that v1 should operate on the current directory only.
 - The removed `PRD.md` described a narrower command and scope model than the implementation now exposes.
 
 ## Priorities
-
-### P0: Resolve Scope Mismatch
-
-- Decide whether `packages/*` fanout is a supported feature or behavior to remove.
-- Make one source of truth for scope across repo docs and tests.
-- If fanout stays, update project-level guidance to reflect it explicitly.
-- If fanout goes, simplify `detect` to current-directory-only behavior and update tests accordingly.
 
 ### P0: Document The Actual CLI Surface
 

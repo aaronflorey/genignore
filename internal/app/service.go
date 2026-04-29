@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -77,59 +76,7 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 	exclude, excludeWarnings := sanitizeKeys(opts.Exclude)
 	warnings := append(includeWarnings, excludeWarnings...)
 
-	targetPaths, err := detectTargetPaths(s.CWD)
-	if err != nil {
-		return CommandResult{}, err
-	}
-	if len(targetPaths) == 0 {
-		targetPaths = []string{s.CWD}
-	}
-
-	if len(targetPaths) == 1 && targetPaths[0] == s.CWD {
-		targetResult, detectErr := s.detectTarget(ctx, targetPaths[0], s.Manager, include, exclude, opts.DryRun)
-		if detectErr != nil {
-			return CommandResult{}, detectErr
-		}
-
-		return CommandResult{
-			Command:                "detect",
-			CWD:                    s.CWD,
-			DetectedProviders:      targetResult.DetectedProviders,
-			IncludedProviders:      include,
-			ExcludedProviders:      exclude,
-			FinalProviders:         targetResult.FinalProviders,
-			UnsupportedKeyWarnings: warnings,
-			RemoteProviderWarnings: remoteWarnings,
-			DetectionResults:       targetResult.DetectionResults,
-			FileAction:             targetResult.FileAction,
-			TemplateProviderCount:  targetResult.TemplateProviderCount,
-		}, nil
-	}
-
-	targetResults := make([]TargetResult, 0, len(targetPaths))
-	detected := makeSet(nil)
-	for _, targetPath := range targetPaths {
-		targetResult, detectErr := s.scanTarget(ctx, targetPath)
-		if detectErr != nil {
-			return CommandResult{}, detectErr
-		}
-		for _, key := range targetResult.DetectedProviders {
-			detected[key] = struct{}{}
-		}
-		targetResults = append(targetResults, targetResult)
-	}
-
-	finalProviders, err := s.detectFinalProviders(mapKeysSorted(detected), s.Manager, include, exclude)
-	if err != nil {
-		return CommandResult{}, err
-	}
-
-	template, err := s.Client.FetchTemplate(ctx, finalProviders)
-	if err != nil {
-		return CommandResult{}, err
-	}
-	block := gitignore.BuildManagedBlock(finalProviders, template.Content, s.Config.Defaults.IgnoreRules)
-	action, err := s.Manager.UpsertManagedBlock(block, opts.DryRun)
+	targetResult, err := s.detectTarget(ctx, s.CWD, s.Manager, include, exclude, opts.DryRun)
 	if err != nil {
 		return CommandResult{}, err
 	}
@@ -137,15 +84,15 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 	return CommandResult{
 		Command:                "detect",
 		CWD:                    s.CWD,
-		Targets:                targetResults,
-		DetectedProviders:      mapKeysSorted(detected),
+		DetectedProviders:      targetResult.DetectedProviders,
 		IncludedProviders:      include,
 		ExcludedProviders:      exclude,
-		FinalProviders:         finalProviders,
+		FinalProviders:         targetResult.FinalProviders,
 		UnsupportedKeyWarnings: warnings,
 		RemoteProviderWarnings: remoteWarnings,
-		FileAction:             action,
-		TemplateProviderCount:  len(template.Providers),
+		DetectionResults:       targetResult.DetectionResults,
+		FileAction:             targetResult.FileAction,
+		TemplateProviderCount:  targetResult.TemplateProviderCount,
 	}, nil
 }
 
@@ -237,27 +184,6 @@ func (s *Service) detectFinalProviders(detectedProviders []string, manager *giti
 	}
 
 	return finalProviders, nil
-}
-
-func detectTargetPaths(cwd string) ([]string, error) {
-	packagesDir := filepath.Join(cwd, "packages")
-	entries, err := os.ReadDir(packagesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read packages directory: %w", err)
-	}
-
-	targets := make([]string, 0)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		targets = append(targets, filepath.Join(packagesDir, entry.Name()))
-	}
-	sort.Strings(targets)
-	return targets, nil
 }
 
 func sortedDetectors(detectors map[string]provider.Detector) []namedDetector {
