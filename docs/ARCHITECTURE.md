@@ -4,64 +4,66 @@
 
 ## System overview
 
-`genignore` is a single-binary, layered Go CLI that detects technology providers from the current working directory, resolves the final provider set (detected + include/exclude/default overrides), fetches matching templates from `github/gitignore` (plus embedded custom templates), and upserts only the managed marker block in `.gitignore` while preserving all user-owned content outside that block.
+`genignore` is a layered Go CLI that analyzes the current working directory for provider signals, resolves a deterministic provider set, fetches `.gitignore` template content from `github/gitignore` (plus embedded local templates), and updates only the managed marker block in `.gitignore` so user-owned lines outside the markers are preserved.
 
 ## Component diagram
 
 ```mermaid
 graph TD
-  A[main.go] --> B[internal/app/cli]
-  B --> C[internal/app/service]
-  B --> D[internal/app/catalog]
+  A[main.go] --> B[internal/app/cli.go]
+  B --> C[internal/app/service.go]
+  B --> D[internal/app/catalog.go]
   C --> E[internal/provider]
-  C --> F[internal/api/client]
-  C --> G[internal/gitignore/manager]
-  C --> H[internal/app/config]
+  C --> F[internal/api/client.go]
+  C --> G[internal/gitignore/manager.go]
+  C --> H[internal/app/config.go]
   F --> I[internal/customtemplate]
-  F --> J[GitHub gitignore HTTP endpoints]
+  F --> J[GitHub gitignore APIs/content]
 ```
 
 ## Data flow
 
-1. `main.go` calls `app.Run(os.Args[1:])`.
-2. `internal/app/cli.go` builds the Cobra command tree (`detect`, `add`, `list`, `search`) and parses flags.
-3. For `detect`/`add`, CLI delegates to `internal/app/service.go`.
-4. In `detect`, `Service.scanTarget` runs provider detectors from `internal/provider` and sorts results deterministically.
-5. `Service.detectFinalProviders` merges detected providers with `--include` and `--exclude`, then sorts the final set (config defaults are applied earlier in `Service.Detect`).
-6. `internal/api/client.go` fetches remote template catalog/content from GitHub and merges embedded custom template content from `internal/customtemplate` when applicable.
-7. `internal/gitignore/manager.go` builds normalized managed block content and `UpsertManagedBlock` either creates, updates, dry-runs, or no-ops `.gitignore`.
-8. CLI renders either JSON output or styled human-readable output (Lipgloss), including warnings and file action status.
+1. Process entry starts in `main.go`, which calls `app.Run(os.Args[1:])`.
+2. `internal/app/cli.go` initializes runtime validation (`runtimeInitError`), loads machine config (`LoadConfig`), and builds Cobra commands: `detect`, `add`, `list`, and `search`.
+3. `detect` and `add` commands delegate to `Service` methods in `internal/app/service.go`.
+4. For detection, `Service.scanTarget` iterates detectors from `provider.Registry()` in sorted key order, collects `provider.Result` entries, and derives matched providers.
+5. `Service.detectFinalProviders` merges detected providers with include/exclude/default inputs, then sorts to keep output stable.
+6. `internal/api/client.go` resolves remote template paths from the GitHub tree API, downloads template parts from raw content URLs, and appends embedded custom template content from `internal/customtemplate` when selected.
+7. `internal/gitignore/manager.go` builds a normalized managed block (`BuildManagedBlock`) and upserts it into `.gitignore` (`UpsertManagedBlock`) as `created`, `updated`, `no-op`, or `dry-run`.
+8. CLI output is rendered either as JSON (`--json`) or human-readable terminal output (Lipgloss labels), including warnings and file action status.
 
-For `list`/`search`, `internal/app/catalog.go` fetches available providers from the catalog client, appends embedded custom providers, sorts, and optionally filters by search term.
+For provider discovery commands, `internal/app/catalog.go` retrieves remote providers, appends embedded custom provider keys, sorts/deduplicates, and optionally filters with substring matching for `search`.
 
 ## Key abstractions
 
-- `Run(args []string)` — CLI entrypoint that initializes runtime checks, config, commands, and output routing (`internal/app/cli.go`).
-- `type commandService interface` — CLI-to-service contract for `Detect` and `Add` command execution (`internal/app/cli.go`).
-- `type Service struct` — Application orchestration layer combining config, detector registry, API client, and gitignore manager (`internal/app/service.go`).
-- `type APIClient interface` — Service-facing abstraction for provider catalog/template retrieval (`internal/app/service.go`).
-- `type Detector interface` and `type Result` — Provider detection contract and normalized detector output (`internal/provider/provider.go`).
-- `func Registry() map[string]Detector` — Central detector registry for runtime/provider/environment signals (`internal/provider/detectors.go`).
-- `type Client struct` and `type TemplateResponse` — Remote catalog/template fetcher with in-process catalog cache and merged template output (`internal/api/client.go`).
-- `type Manager struct` plus `BuildManagedBlock` / `UpsertManagedBlock` — Managed `.gitignore` block generation and safe replacement semantics (`internal/gitignore/manager.go`).
-- `type Config` / `type ConfigDefaults` and `LoadConfig()` — Machine-level TOML defaults loader (`internal/app/config.go`).
-- `type Definition` and custom template registry (`ProviderKeys`, `ContentForProviders`) — Embedded template extension point for non-remote providers (`internal/customtemplate/definitions.go`, `internal/customtemplate/registry.go`).
+- `Run(args []string) int` — top-level CLI bootstrap and command execution (`internal/app/cli.go`).
+- `type commandService interface` — command-layer contract exposing `Detect` and `Add` (`internal/app/cli.go`).
+- `type Service struct` — orchestration boundary combining config, detectors, API client, and file manager (`internal/app/service.go`).
+- `type DetectOptions` / `type AddOptions` — execution-time options passed from CLI to service (`internal/app/service.go`).
+- `type APIClient interface` — service-facing abstraction for catalog and template retrieval (`internal/app/service.go`).
+- `type Client struct` + `FetchTemplate` / `AvailableProviders` — HTTP-backed provider catalog and template fetcher with in-memory catalog cache (`internal/api/client.go`).
+- `type Detector interface` and `type Result` — provider detection contract and normalized detection output (`internal/provider/provider.go`).
+- `func Registry() map[string]Detector` — detector registry for runtime, filesystem, project, and installed-tool signals (`internal/provider/detectors.go`).
+- `type Manager struct` + `BuildManagedBlock` / `UpsertManagedBlock` — managed marker block assembly and safe merge semantics for `.gitignore` (`internal/gitignore/manager.go`).
+- `type Config` / `type ConfigDefaults` + `LoadConfig()` — TOML-backed machine defaults loader from `~/.config/genignore/config.toml` (`internal/app/config.go`).
+- `type Definition`, `ProviderKeys()`, and `ContentForProviders()` — embedded custom-template registry and content loader (`internal/customtemplate/definitions.go`, `internal/customtemplate/registry.go`).
 
 ## Directory structure rationale
 
-The project is organized as a thin executable entrypoint plus focused internal packages so that command parsing, orchestration, detection, remote fetching, and file mutation are separated and testable in isolation.
+The repository uses a thin entrypoint and focused internal packages so each concern (command surface, orchestration, detection, remote retrieval, and file mutation) remains isolated and testable.
 
 ```text
 .
-├── main.go                      # Minimal process entrypoint; delegates to app.Run
+├── main.go                  # Minimal process entrypoint delegating to app.Run
 ├── internal/
-│   ├── app/                     # CLI command wiring, config loading, service orchestration, output contracts
-│   ├── api/                     # GitHub-backed provider catalog + template HTTP client
-│   ├── provider/                # Provider support list and detector implementations/registry
-│   ├── gitignore/               # Managed marker block build/merge and .gitignore file actions
-│   └── customtemplate/          # Embedded custom provider templates and registration
-├── docs/                        # Generated project documentation
-└── .github/                     # Repository automation/workflow configuration
+│   ├── app/                 # CLI wiring, result types, config loading, and orchestration services
+│   ├── api/                 # GitHub catalog/template client and decoding logic
+│   ├── provider/            # Supported key set and detector implementations
+│   ├── gitignore/           # Managed marker block building and file upsert behavior
+│   └── customtemplate/      # Embedded non-remote templates and registry
+├── docs/                    # Project documentation
+├── .github/                 # CI/release automation metadata
+└── .planning/               # Local planning artifacts
 ```
 
-This layout keeps domain boundaries explicit: `app` orchestrates, `provider` decides what to include, `api` supplies template content, and `gitignore` owns on-disk mutation rules.
+This package layout keeps command handling in `app`, provider inference in `provider`, remote content retrieval in `api`, and disk mutation safety in `gitignore`, which minimizes coupling and keeps behavior deterministic.

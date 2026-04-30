@@ -3,35 +3,33 @@
 
 ## Test framework and setup
 
-This project uses Go's standard `testing` package for unit and integration-style tests, with `net/http/httptest` used for HTTP client tests (for example in `internal/api/client_test.go`). The module targets `go 1.22` (`go.mod`), so install a compatible Go toolchain and run:
+This repository uses Go's standard `testing` package, with HTTP behavior tested using `net/http/httptest` (see `internal/api/client_test.go`). The module requires Go `1.22` (`go.mod`), so install a compatible Go toolchain and download dependencies before running tests:
 
 ```bash
-go mod tidy
+go mod download
 ```
-
-before running tests.
 
 ## Running tests
 
-Run the full test suite:
+Run the full suite:
 
 ```bash
 go test ./...
 ```
 
-Run tests for a single package:
+Run one package:
 
 ```bash
-go test ./internal/app
+go test ./internal/provider
 ```
 
-Run a single test by name:
+Run one test by name:
 
 ```bash
 go test ./internal/app -run TestListCommand
 ```
 
-Run tests with coverage output:
+Run with coverage output:
 
 ```bash
 go test ./... -coverprofile=coverage.out
@@ -41,15 +39,15 @@ Watch mode is not configured in this repository.
 
 ## Writing new tests
 
-- Use Go's colocated naming convention: place tests next to implementation files and name them `*_test.go` (for example `internal/provider/detectors_test.go`, `internal/gitignore/manager_test.go`).
-- Prefer table-driven subtests with `t.Run(...)` for multiple scenarios in one function (used extensively in `internal/provider/detectors_test.go`).
-- Use `t.Parallel()` where tests are independent.
-- Reuse existing test helpers when available, such as `captureRunOutput(...)` / `captureRunOutputWithHome(...)` in `internal/app/cli_test.go` for CLI-output assertions.
-- Keep network behavior deterministic by using `httptest.NewServer` plus fixture files under `internal/api/testdata/`.
+- Keep tests colocated with implementation and use the `*_test.go` pattern (for example `internal/app/service_test.go`, `internal/gitignore/manager_test.go`).
+- Prefer table-driven tests with `t.Run(...)` for multi-case behavior (for example in `internal/provider/detectors_test.go`).
+- Use `t.Parallel()` for independent tests to reduce suite runtime.
+- Reuse CLI helpers in `internal/app/cli_test.go`, including `captureRunOutput(...)` and `captureRunOutputWithHome(...)`, for command-output assertions.
+- For API behavior, use `httptest.NewServer` and fixtures in `internal/api/testdata/` (`list.json`, `template.txt`) to keep tests deterministic.
 
 ## Coverage requirements
 
-No minimum coverage threshold is configured in this repository.
+No explicit coverage threshold is configured in this repository.
 
 | Type | Threshold |
 | --- | --- |
@@ -60,11 +58,11 @@ No minimum coverage threshold is configured in this repository.
 
 ## CI integration
 
-Tests run in GitHub Actions workflow `.github/workflows/ci.yml`:
+Tests run in GitHub Actions via `.github/workflows/ci.yml`.
 
 - **Workflow:** `ci`
 - **Triggers:** `push`, `pull_request`
 - **Job:** `lint-and-test`
-- **Test step command:** `go test ./...`
+- **Test command:** `go test ./...`
 
-The same workflow also runs linting in the `lint-and-test` job before the test step.
+The same job runs linting (`golangci/golangci-lint-action@v8`) before the test step.

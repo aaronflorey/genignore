@@ -3,29 +3,33 @@
 
 ## Local setup
 
-1. Fork the repository in GitHub, then clone your fork:
+1. Fork the repository, then clone your fork and enter the project directory:
 
 ```bash
 git clone <your-fork-url>
 cd genignore
 ```
 
-2. Ensure your Go toolchain satisfies the module requirement (`go 1.22` in `go.mod`).
+2. Confirm your toolchain matches module requirements (`go 1.22` in `go.mod`):
 
-3. Download and tidy dependencies:
+```bash
+go version
+```
+
+3. Sync module dependencies:
 
 ```bash
 go mod tidy
 ```
 
-4. Build and run tests locally before opening a PR:
+4. Build and test before opening a PR:
 
 ```bash
 go build ./...
 go test ./...
 ```
 
-5. Run the CLI during development from source:
+5. Run commands directly from source while developing:
 
 ```bash
 go run . detect --dry-run
@@ -33,33 +37,36 @@ go run . detect --dry-run
 
 ## Build commands
 
-This repository does not use `package.json` scripts; development uses standard Go commands plus CI/release tooling.
+This repository does not use `package.json` scripts. Development and validation use Go module commands plus release tooling.
 
 | Command | Description |
 | --- | --- |
-| `go build ./...` | Compile all packages in the module. |
-| `go test ./...` | Run the full test suite across all packages. |
-| `go run . detect` | Run the CLI directly from source for local validation. |
-| `go run . add <keys...>` | Test add-flow behavior against a working directory. |
-| `goreleaser check` | Validate `.goreleaser.yaml` configuration (mirrors CI release-validation). |
-| `goreleaser build --snapshot --clean` | Build local release artifacts without publishing. |
+| `go build ./...` | Compile all packages in this module. |
+| `go test ./...` | Run all tests across `internal/...` packages. |
+| `go run . detect` | Run provider detection from source and update the managed `.gitignore` block. |
+| `go run . detect --dry-run` | Preview detection output and file action without writing. |
+| `go run . add <keys...>` | Add provider keys to the existing managed set. |
+| `go run . list` | Print all supported provider keys from the provider catalog. |
+| `go run . search <term>` | Search provider keys by term. |
+| `goreleaser check` | Validate `.goreleaser.yaml` locally (equivalent intent to CI release validation). |
+| `goreleaser build --snapshot --clean` | Build release artifacts locally without publishing a release. |
 
 ## Code style
 
-- **Formatting/lint baseline:** Go standard formatting and idiomatic style (`gofmt`/`go fmt`) are expected for all changed files.
-- **CI-enforced linting:** GitHub Actions runs `golangci/golangci-lint-action@v8` in `.github/workflows/ci.yml` (job: `lint-and-test`, step: `Lint`).
-- **Project lint config:** No repository-local `.golangci.yml`/`.golangci.yaml` file is present; the workflow action configuration is the active lint entry point.
-- **Tests in style gate:** CI also runs `go test ./...` in the same `lint-and-test` job.
+- **Formatting:** use standard Go formatting (`gofmt`/`go fmt`) for changed files.
+- **Linting tool:** CI runs `golangci/golangci-lint-action@v8` in `.github/workflows/ci.yml` (`lint-and-test` job, `Lint` step).
+- **Lint configuration:** no repo-local `.golangci.yml`/`.golangci.yaml`/`.golangci.toml` is present, so workflow defaults and action configuration are the active lint baseline.
+- **CI quality gate:** the same CI job also runs `go test ./...`.
 
 ## Branch conventions
 
-- Default branch is `main` (release workflow triggers on pushes to `main` in `.github/workflows/release-please.yml`).
-- No branch naming convention is documented in `CONTRIBUTING.md` or a PR template (neither file exists in this repository).
+- The repository’s release workflow runs on pushes to `main` (`.github/workflows/release-please.yml`), so `main` is the effective default branch.
+- No explicit branch naming pattern is documented in `CONTRIBUTING.md` or `.github/PULL_REQUEST_TEMPLATE.md` (both are absent).
 
 ## PR process
 
-- Open a pull request against `main`.
-- Ensure CI is passing for your branch (`lint-and-test` and `release-validation` in `.github/workflows/ci.yml`).
-- Use conventional commit prefixes such as `feat`, `fix`, `perf`, `docs`, `test`, `refactor`, or `chore` so `release-please` can categorize release notes (`release-please-config.json`).
-- Keep changes scoped and include/adjust tests when behavior changes.
-- If your change affects release packaging, verify `.goreleaser.yaml` still passes `goreleaser check`.
+- Open your PR against `main`.
+- Ensure GitHub Actions checks pass in `.github/workflows/ci.yml` (`lint-and-test` and `release-validation`).
+- Use conventional commit types (`feat`, `fix`, `perf`, `docs`, `test`, `refactor`, `chore`) so `release-please` can map commit types to changelog sections (`release-please-config.json`).
+- Keep PR scope focused and include or update tests when behavior changes.
+- If changes affect packaging, validate release configuration with `goreleaser check` and confirm snapshot build compatibility (`goreleaser build --snapshot --clean`).

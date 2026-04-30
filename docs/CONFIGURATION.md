@@ -4,22 +4,25 @@
 
 ## Environment variables
 
-`genignore` does not define any project-specific environment variables in the repository, and there is no `.env.example`/`.env.sample` file.
+No project-specific environment variables are defined in this repository (no `.env.example` or `.env.sample`, and no direct `os.Getenv`/`LookupEnv` usage in runtime code).
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| _None_ | N/A | N/A | Configuration is loaded from a TOML file at `$HOME/.config/genignore/config.toml`. |
+| _None_ | N/A | N/A | Runtime configuration is loaded from a TOML file in the user home directory. |
 
 ## Config file format
 
-The CLI reads machine-level defaults from `~/.config/genignore/config.toml` (`internal/app/config.go`).
+`genignore` reads machine-level defaults from:
+
+- `$HOME/.config/genignore/config.toml` (see `internal/app/config.go`, `configRelativePath`)
+
+Supported shape:
 
 - Top-level table: `defaults`
-- Supported keys under `defaults`:
-  - `providers` (`[]string`): default provider keys used by `detect` and prepended for `add`
-  - `ignore_rules` (`[]string`): additional ignore patterns appended to the generated managed block
+- `defaults.providers` (`[]string`): default provider keys used by `detect` when `--include` is not set
+- `defaults.ignore_rules` (`[]string`): extra ignore rules appended into the managed block
 
-Minimal example:
+Minimal working example:
 
 ```toml
 [defaults]
@@ -27,41 +30,39 @@ providers = ["go", "node"]
 ignore_rules = [".direnv/", "coverage.out"]
 ```
 
-Notes:
+Validation behavior:
 
-- Unknown fields are rejected (`DisallowUnknownFields` in `LoadConfig`).
-- If the config file does not exist, `genignore` continues with an empty config.
+- Unknown fields are rejected (`toml.Decoder.DisallowUnknownFields()` in `LoadConfig`).
+- If the file is missing, config loading returns an empty config (not an error).
 
 ## Required vs optional settings
 
-All configuration settings are optional.
+All settings are optional.
 
-- `~/.config/genignore/config.toml`: optional. If missing, `LoadConfig()` returns an empty config.
-- `[defaults].providers`: optional list.
-- `[defaults].ignore_rules`: optional list.
+- Config file path (`$HOME/.config/genignore/config.toml`): optional.
+- `defaults.providers`: optional.
+- `defaults.ignore_rules`: optional.
 
-Failure conditions:
+Startup fails only when:
 
-- The command fails if the file exists but contains invalid TOML or wrong field types (for example, `providers = "go"` instead of an array).
-- The command also fails if the config file cannot be read/stat'ed due to filesystem errors.
+- resolving the user home directory fails (`os.UserHomeDir` via `userHomeDir`),
+- the file exists but is invalid TOML,
+- a field has the wrong type (for example, `providers = "go"`), or
+- the file cannot be read/stat'ed due to filesystem errors.
 
 ## Defaults
 
-There are no hard-coded provider defaults in source, but managed block generation always includes required environment ignore rules: `.env`, `.env.*`, `!.env.example`, and `!.env.ci` (`internal/gitignore/manager.go`).
+When no config file is present, `LoadConfig()` returns the zero-value `Config` (empty provider and ignore-rule lists).
 
-| Setting | Default value | Source |
-| --- | --- | --- |
-| `defaults.providers` | empty list (`[]`) | `LoadConfig()` returns zero-value `Config` when file is absent (`internal/app/config.go`) |
-| `defaults.ignore_rules` | empty list (`[]`) | `LoadConfig()` returns zero-value `Config` when file is absent (`internal/app/config.go`) |
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `defaults.providers` | Optional | `[]` | Used by `Detect` only when `--include` is omitted (`internal/app/service.go`). |
+| `defaults.ignore_rules` | Optional | `[]` | Passed into managed-block generation as extra rules (`internal/app/service.go`). |
 
-Runtime behavior that depends on these defaults:
-
-- `detect`: uses `defaults.providers` only when `--include` is not provided (`internal/app/service.go`).
-- `add`: prepends `defaults.providers` before explicit keys (`internal/app/service.go`).
-- Managed block generation always includes `defaults.ignore_rules` as extra rule sources (`internal/app/service.go`).
+Independent of config file values, managed block normalization always enforces these env rules: `.env`, `.env.*`, `!.env.example`, and `!.env.ci` (`requiredEnvRules` in `internal/gitignore/manager.go`).
 
 ## Per-environment overrides
 
-No built-in per-environment configuration files are implemented (no `.env.development`, `.env.production`, or `.env.test` handling in this repository).
+No built-in environment-specific config files are implemented (no `.env.development`, `.env.production`, or `.env.test` handling in runtime code).
 
-To use different settings per environment, maintain different `config.toml` files per machine/user profile and run `genignore` in that environment with the corresponding home directory.
+To use different settings across environments, provide different home-directory config files at `$HOME/.config/genignore/config.toml` per machine/user context.

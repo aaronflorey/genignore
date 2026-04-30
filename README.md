@@ -1,7 +1,7 @@
 <!-- generated-by: gsd-doc-writer -->
-# github.com/aaronflorey/genignore
+# genignore
 
-`genignore` is a Go CLI for developers who want to safely generate and maintain only the managed section of a repository `.gitignore` file.
+`genignore` is a Go CLI for developers who want deterministic `.gitignore` generation while preserving manual rules outside a managed marker block.
 
 ## Installation
 
@@ -11,14 +11,14 @@ go install github.com/aaronflorey/genignore@latest
 
 ## Quick start
 
-1. Clone the repository and enter it:
+1. Clone and enter the repository:
 
 ```bash
 git clone https://github.com/aaronflorey/genignore.git
 cd genignore
 ```
 
-2. Run detection to create or update the managed `.gitignore` block:
+2. Detect providers and create/update the managed `.gitignore` block:
 
 ```bash
 go run . detect
@@ -30,7 +30,7 @@ go run . detect
 go run . detect --dry-run
 ```
 
-4. Add explicit providers to the managed set:
+4. Add specific providers to the existing managed set:
 
 ```bash
 go run . add go node
@@ -38,36 +38,26 @@ go run . add go node
 
 ## Usage examples
 
-List supported providers:
+List all supported provider keys:
 
 ```bash
 genignore list
 ```
 
-Search provider keys:
+Search providers by term:
 
 ```bash
-genignore search go
+genignore search jetbrains
 ```
 
-Get machine-readable output for scripts/CI:
+Run detection with machine-readable output:
 
 ```bash
 genignore detect --json
 ```
 
-Common commands:
-
-- `genignore detect` — detect providers and rebuild the managed block.
-- `genignore add <keys...>` — add providers to the existing managed set.
-- `genignore list` — print all supported provider keys in sorted order.
-- `genignore search <term>` — filter supported providers by a search term.
-
-Bundled custom providers:
-
-- `ai-agents`
-- `wrangler`
+Example result labels in human-readable mode include `Detected:`, `Final:`, and `File:`.
 
 ## License
 
-License is not specified in this repository (no `LICENSE` file detected).
+No `LICENSE` file is currently present in this repository.
