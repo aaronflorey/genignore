@@ -98,6 +98,7 @@ Everything outside that block is preserved on every run. The managed block alway
 `genignore` can load machine-level defaults from `$HOME/.config/genignore/config.toml`.
 
 Config is optional. If the file does not exist, commands keep their existing behavior.
+Environment variables are not a supported configuration surface.
 
 ```toml
 [defaults]

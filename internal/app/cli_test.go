@@ -206,6 +206,37 @@ func TestDetectDefaultCommandOutputShowsNoOpFileAction(t *testing.T) {
 	}
 }
 
+func TestDetectIgnoresGENIGNOREEnvironmentVariables(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{detectResult: CommandResult{
+			Command:        "detect",
+			FinalProviders: []string{"go"},
+			FileAction:     gitignore.FileActionNoOp,
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+	t.Setenv("GENIGNORE_JSON", "1")
+	t.Setenv("GENIGNORE_VERBOSE", "1")
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"detect"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	if strings.HasPrefix(stdout, "{") {
+		t.Fatalf("expected human-readable output, got json: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Final: go") || !strings.Contains(stdout, "File: no-op") {
+		t.Fatalf("unexpected stdout: %s", stdout)
+	}
+	if strings.Contains(stdout, "Detection:") {
+		t.Fatalf("unexpected verbose output from env vars: %s", stdout)
+	}
+}
+
 func TestDetectVerboseCommandShowsEvidence(t *testing.T) {
 	oldFactory := newCommandService
 	newCommandService = func(string, Config) commandService {

@@ -11,7 +11,6 @@ import (
 	"github.com/aaronflorey/genignore/internal/provider"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 type commandService interface {
@@ -41,8 +40,6 @@ func Run(args []string) int {
 		Use:   "genignore",
 		Short: "Generate and manage gitignore block",
 	}
-	viper.SetEnvPrefix("GENIGNORE")
-	viper.AutomaticEnv()
 
 	jsonOutput := false
 	verbose := false
