@@ -621,6 +621,47 @@ func TestUpsertEnvEquivalentRerunIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestUpsertDropsStaleManagedEnvExceptionsButPreservesUserOwnedOnes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := BuildManagedBlock([]string{"go"}, strings.Join([]string{
+		"bin/",
+		"!.env.local",
+		"",
+	}, "\n")) + "# local rule\n!.env.local\n"
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed write failed: %v", err)
+	}
+
+	m := NewManager(dir)
+	if _, err := m.UpsertManagedBlock(BuildManagedBlock([]string{"go"}, "bin/\n"), false); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+
+	if countExactLine(value, "!.env.local") != 1 {
+		t.Fatalf("expected only the user-owned env exception to remain\n%s", value)
+	}
+	start := strings.Index(value, StartMarker)
+	end := strings.Index(value, EndMarker)
+	if start == -1 || end == -1 {
+		t.Fatalf("expected managed markers in output\n%s", value)
+	}
+	if strings.Contains(value[start:end], "!.env.local") {
+		t.Fatalf("expected stale managed env exception to be removed\n%s", value)
+	}
+	if !strings.HasSuffix(value, "# local rule\n!.env.local\n") {
+		t.Fatalf("expected user-owned env exception preserved outside managed block\n%s", value)
+	}
+}
+
 func countExactLine(content, line string) int {
 	count := 0
 	for _, current := range strings.Split(content, "\n") {

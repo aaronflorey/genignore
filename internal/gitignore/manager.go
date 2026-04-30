@@ -250,9 +250,6 @@ func mergeManagedBlock(existing, block string) (string, error) {
 	if malformed {
 		return "", fmt.Errorf("malformed managed markers in .gitignore: ensure exactly one %q and one %q in order", StartMarker, EndMarker)
 	}
-	if normalizedBlock, ok := normalizeManagedBlockWithExistingEnvRules(existing, block); ok {
-		block = normalizedBlock
-	}
 	managedRules := buildManagedRuleIndex(block)
 	if !hasMarkers {
 		existing = dedupeUnmanagedLines(existing, managedRules)
@@ -268,53 +265,6 @@ func mergeManagedBlock(existing, block string) (string, error) {
 	prefix := dedupeUnmanagedLines(existing[:start], managedRules)
 	suffix := dedupeUnmanagedLines(existing[end:], managedRules)
 	return prefix + block + suffix, nil
-}
-
-func normalizeManagedBlockWithExistingEnvRules(existing, block string) (string, bool) {
-	providers, template, ok := parseManagedBlock(block)
-	if !ok {
-		return "", false
-	}
-
-	return BuildManagedBlock(providers, normalizeTemplate(template, collectEnvRules(existing))), true
-}
-
-func parseManagedBlock(block string) ([]string, string, bool) {
-	lines := strings.Split(block, "\n")
-	providerIndex := -1
-	endIndex := -1
-	for idx, line := range lines {
-		if strings.HasPrefix(line, "# Providers: ") {
-			providerIndex = idx
-		}
-		if line == EndMarker {
-			endIndex = idx
-			break
-		}
-	}
-
-	if providerIndex == -1 || endIndex == -1 || providerIndex >= endIndex {
-		return nil, "", false
-	}
-
-	providerCSV := strings.TrimPrefix(lines[providerIndex], "# Providers: ")
-	providers := []string{}
-	if providerCSV != "" {
-		providers = strings.Split(providerCSV, ",")
-	}
-	template := strings.Join(lines[providerIndex+1:endIndex], "\n")
-	return providers, template, true
-}
-
-func collectEnvRules(content string) []string {
-	lines := strings.Split(content, "\n")
-	envRules := make([]string, 0)
-	for _, line := range lines {
-		if canonical, ok := canonicalizeEnvRule(line); ok {
-			envRules = append(envRules, canonical)
-		}
-	}
-	return envRules
 }
 
 type managedRuleIndex struct {

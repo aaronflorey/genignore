@@ -91,7 +91,7 @@ The tool owns only the block between its markers inside `.gitignore`.
 # END genignore
 ```
 
-Everything outside that block is preserved on every run.
+Everything outside that block is preserved on every run. The managed block always owns the canonical `.env`, `.env.*`, `!.env.example`, and `!.env.ci` safety lines; any extra env-specific exceptions stay user-owned unless they come from the current template or configured ignore rules.
 
 ## Machine-Level Config
 

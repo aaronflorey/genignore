@@ -887,6 +887,49 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	}
 }
 
+func TestAddDropsStaleManagedEnvExceptionsButPreservesUserOwnedOnes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manager := gitignore.NewManager(dir)
+	seed := gitignore.BuildManagedBlock([]string{"go"}, "### Go ###\n*.test\n!.env.local\n") + "# local rule\n!.env.local\n"
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed write failed: %v", err)
+	}
+
+	client := &fakeAPI{available: provider.SupportedKeys, template: noisyToptalTemplate}
+	svc := &Service{CWD: dir, Client: client, Manager: manager}
+
+	res, err := svc.Add(context.Background(), AddOptions{Keys: []string{"macos"}})
+	if err != nil {
+		t.Fatalf("add failed: %v", err)
+	}
+	if res.FileAction != gitignore.FileActionUpdated {
+		t.Fatalf("unexpected add action: %s", res.FileAction)
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+
+	if countExactLine(value, "!.env.local") != 1 {
+		t.Fatalf("expected only one user-owned env exception to remain\n%s", value)
+	}
+	start := strings.Index(value, gitignore.StartMarker)
+	end := strings.Index(value, gitignore.EndMarker)
+	if start == -1 || end == -1 {
+		t.Fatalf("expected managed block markers in output\n%s", value)
+	}
+	if strings.Contains(value[start:end], "!.env.local") {
+		t.Fatalf("expected stale managed env exception removed from managed block\n%s", value)
+	}
+	if !strings.HasSuffix(value, "# local rule\n!.env.local\n") {
+		t.Fatalf("expected user-owned env exception preserved outside managed block\n%s", value)
+	}
+}
+
 func TestDetectIgnoresPackagesChildrenAndWritesSingleRootGitignore(t *testing.T) {
 	t.Parallel()
 
@@ -963,6 +1006,16 @@ func TestDetectIgnoresPackagesChildrenAndWritesSingleRootGitignore(t *testing.T)
 			t.Fatalf("expected package .gitignore to remain untouched in %s", packagePath)
 		}
 	}
+}
+
+func countExactLine(content, line string) int {
+	count := 0
+	for _, current := range strings.Split(content, "\n") {
+		if current == line {
+			count++
+		}
+	}
+	return count
 }
 
 func TestDetectPreservesRootManagedOSProvidersWhenPackagesDirectoryExists(t *testing.T) {
