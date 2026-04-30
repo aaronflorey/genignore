@@ -167,7 +167,10 @@ Run the same checks used in CI before pushing changes:
 ```bash
 go test ./...
 golangci-lint run
+mise x goreleaser@v2.15.2 -- goreleaser check
 ```
+
+CI also runs `mise x goreleaser@v2.15.2 -- goreleaser build --snapshot --clean` to validate the checked-in release config without publishing.
 
 ## Notes
 
@@ -178,3 +181,4 @@ golangci-lint run
 - Re-running equivalent commands should not create unnecessary `.gitignore` churn.
 - Byte-identical reruns surface `fileAction: no-op` instead of `updated`, while `dry-run` remains a preview-only outcome.
 - Node detection treats `package.json`, `bun.lock`, and `bun.lockb` as project signals.
+- Release automation pins GoReleaser to `v2.15.2`, and CI validates the release config with a non-publishing snapshot build before tagged publishing runs.
