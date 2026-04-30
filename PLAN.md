@@ -21,7 +21,7 @@ This plan replaces the older PRD and focuses on the next actionable improvements
 ### P1: Capture Architecture And Invariants
 
 - Add a short architecture note for the current package split:
-  `internal/app` for command orchestration, `internal/provider` for detection, `internal/api` for Toptal access, and `internal/gitignore` for managed block updates.
+  `internal/app` for command orchestration, `internal/provider` for detection, `internal/api` to implement GitHub gitignore template access, and `internal/gitignore` for managed block updates.
 - Record the invariants that should not regress:
   deterministic provider ordering, API-required runtime behavior, overwrite-only inside managed markers, and preservation of user content outside the block.
 
