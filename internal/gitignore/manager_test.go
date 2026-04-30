@@ -365,7 +365,7 @@ func TestUpsertDryRunLeavesExistingFileByteExact(t *testing.T) {
 	}
 }
 
-func TestUpsertDedupRemovesExactDuplicateUnmanagedRule(t *testing.T) {
+func TestUpsertPreservesExactDuplicateUnmanagedRule(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -391,15 +391,18 @@ func TestUpsertDedupRemovesExactDuplicateUnmanagedRule(t *testing.T) {
 	}
 	value := string(content)
 
-	if strings.Count(value, ".DS_Store") != 1 {
-		t.Fatalf("expected duplicate unmanaged .DS_Store to be removed\n%s", value)
+	if countExactLine(value, ".DS_Store") != 2 {
+		t.Fatalf("expected managed and user-owned .DS_Store lines to remain\n%s", value)
 	}
 	if !strings.Contains(value, "*.log") {
 		t.Fatalf("expected non-duplicate unmanaged rules to remain\n%s", value)
 	}
+	if !strings.HasSuffix(value, seed) {
+		t.Fatalf("expected unmanaged content outside the managed block to stay byte-exact\n%s", value)
+	}
 }
 
-func TestUpsertDedupRemovesSafeEquivalentLeadingSlashForm(t *testing.T) {
+func TestUpsertPreservesLeadingSlashFormOutsideManagedBlock(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -424,15 +427,18 @@ func TestUpsertDedupRemovesSafeEquivalentLeadingSlashForm(t *testing.T) {
 	}
 	value := string(content)
 
-	if strings.Contains(value, "\n/.DS_Store\n") {
-		t.Fatalf("expected unmanaged /.DS_Store to be deduped against managed .DS_Store\n%s", value)
+	if countExactLine(value, "/.DS_Store") != 1 {
+		t.Fatalf("expected user-owned /.DS_Store to remain outside the managed block\n%s", value)
 	}
-	if strings.Count(value, ".DS_Store") != 1 {
-		t.Fatalf("expected only managed .DS_Store to remain\n%s", value)
+	if countExactLine(value, ".DS_Store") != 1 {
+		t.Fatalf("expected managed .DS_Store to be added without mutating the user-owned rooted rule\n%s", value)
+	}
+	if !strings.HasSuffix(value, seed) {
+		t.Fatalf("expected unmanaged content outside the managed block to stay byte-exact\n%s", value)
 	}
 }
 
-func TestUpsertDedupPreservesCommentsAndBlankLines(t *testing.T) {
+func TestUpsertPreservesCommentsBlankLinesAndDuplicateRules(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -466,11 +472,11 @@ func TestUpsertDedupPreservesCommentsAndBlankLines(t *testing.T) {
 	if !strings.Contains(value, "# Keep this comment") {
 		t.Fatalf("expected unmanaged comment to be preserved\n%s", value)
 	}
-	if countExactLine(value, ".DS_Store") != 1 {
-		t.Fatalf("expected unmanaged duplicate .DS_Store to be removed\n%s", value)
+	if countExactLine(value, ".DS_Store") != 2 {
+		t.Fatalf("expected managed and user-owned .DS_Store lines to remain\n%s", value)
 	}
-	if strings.Contains(value, "\n# managed comment\n# Keep this comment\n") {
-		t.Fatalf("expected unmanaged comment not to be deduped using managed comment lines\n%s", value)
+	if !strings.HasSuffix(value, seed) {
+		t.Fatalf("expected unmanaged comments and blank lines to stay byte-exact\n%s", value)
 	}
 }
 
@@ -531,7 +537,7 @@ func TestBuildManagedBlockAlwaysIncludesEnvExceptions(t *testing.T) {
 	}
 }
 
-func TestUpsertEnvReconcilesExistingRulesDeterministically(t *testing.T) {
+func TestUpsertPreservesExistingEnvRulesOutsideManagedBlock(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -563,16 +569,22 @@ func TestUpsertEnvReconcilesExistingRulesDeterministically(t *testing.T) {
 	}
 	value := string(content)
 
+	start := strings.Index(value, StartMarker)
+	end := strings.Index(value, EndMarker)
+	if start == -1 || end == -1 {
+		t.Fatalf("expected managed markers in output\n%s", value)
+	}
+	managed := value[start:end]
 	for _, line := range []string{".env", ".env.*", "!.env.example", "!.env.ci"} {
-		if countExactLine(value, line) != 1 {
-			t.Fatalf("expected exactly one %q in reconciled output\n%s", line, value)
+		if countExactLine(managed, line) != 1 {
+			t.Fatalf("expected exactly one %q in the managed block\n%s", line, value)
 		}
 	}
-	if strings.Contains(value, "\n/.env\n") {
-		t.Fatalf("expected rooted duplicate /.env to be reconciled\n%s", value)
+	if strings.Contains(managed, "!.env.local") {
+		t.Fatalf("expected env-specific exception to stay user-owned when it only exists outside the managed block\n%s", value)
 	}
-	if !strings.Contains(value, "\n!.env.local\n") {
-		t.Fatalf("expected env-specific exception to remain represented\n%s", value)
+	if !strings.HasSuffix(value, seed) {
+		t.Fatalf("expected unmanaged env rules outside the managed block to stay byte-exact\n%s", value)
 	}
 }
 

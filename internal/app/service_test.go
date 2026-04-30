@@ -75,7 +75,7 @@ func detectorResult(result provider.Result) provider.Detector {
 	})
 }
 
-func TestDetectPreservesManagedOSProvidersAcrossCrossRuntimeRuns(t *testing.T) {
+func TestDetectDropsManagedOSProvidersAcrossCrossRuntimeRuns(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	manager := gitignore.NewManager(dir)
@@ -98,13 +98,13 @@ func TestDetectPreservesManagedOSProvidersAcrossCrossRuntimeRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
 	}
-	if !reflect.DeepEqual(res.FinalProviders, []string{"linux", "macos"}) {
-		t.Fatalf("expected detect to preserve managed OS provider, got %v", res.FinalProviders)
+	if !reflect.DeepEqual(res.FinalProviders, []string{"linux"}) {
+		t.Fatalf("expected detect to reset to the current runtime providers, got %v", res.FinalProviders)
 	}
 	if len(client.requests) != 1 {
 		t.Fatalf("expected one template request, got %d", len(client.requests))
 	}
-	if !reflect.DeepEqual(client.requests[0], []string{"linux", "macos"}) {
+	if !reflect.DeepEqual(client.requests[0], []string{"linux"}) {
 		t.Fatalf("expected sorted template request providers, got %v", client.requests[0])
 	}
 }
@@ -143,7 +143,7 @@ func TestDetectResetDropsManagedNonOSProviders(t *testing.T) {
 	}
 }
 
-func TestDetectExcludeRemovesPreservedManagedOSProvider(t *testing.T) {
+func TestDetectIncludeKeepsExplicitManagedOSProviderAcrossCrossRuntimeRuns(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	manager := gitignore.NewManager(dir)
@@ -162,17 +162,17 @@ func TestDetectExcludeRemovesPreservedManagedOSProvider(t *testing.T) {
 		},
 	}
 
-	res, err := svc.Detect(context.Background(), DetectOptions{Exclude: []string{"macos"}})
+	res, err := svc.Detect(context.Background(), DetectOptions{Include: []string{"macos"}})
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
 	}
-	if !reflect.DeepEqual(res.FinalProviders, []string{"linux"}) {
-		t.Fatalf("expected exclude to remove preserved OS provider, got %v", res.FinalProviders)
+	if !reflect.DeepEqual(res.FinalProviders, []string{"linux", "macos"}) {
+		t.Fatalf("expected explicit include to keep the managed OS provider, got %v", res.FinalProviders)
 	}
 	if len(client.requests) != 1 {
 		t.Fatalf("expected one template request, got %d", len(client.requests))
 	}
-	if !reflect.DeepEqual(client.requests[0], []string{"linux"}) {
+	if !reflect.DeepEqual(client.requests[0], []string{"linux", "macos"}) {
 		t.Fatalf("expected sorted template request providers, got %v", client.requests[0])
 	}
 }
@@ -311,6 +311,67 @@ func TestDetectAcceptsEmbeddedExceptionProvider(t *testing.T) {
 	}
 	if len(res.UnsupportedKeyWarnings) != 0 {
 		t.Fatalf("unexpected unsupported warnings: %v", res.UnsupportedKeyWarnings)
+	}
+}
+
+func TestDetectKeepsMatchedProviderWhenCatalogSnapshotOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: []string{"node"}, template: "generated\n"}
+	svc := &Service{
+		CWD:       dir,
+		Client:    client,
+		Manager:   gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{"go": matchedDetector("go")},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.DetectedProviders, []string{"go"}) {
+		t.Fatalf("unexpected detected providers: %v", res.DetectedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"go"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"go"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
+	}
+	if !containsString(res.RemoteProviderWarnings, "supported provider missing remotely: go") {
+		t.Fatalf("expected remote drift warning for omitted provider, got %v", res.RemoteProviderWarnings)
+	}
+}
+
+func TestAddKeepsExistingManagedProviderWhenCatalogSnapshotOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manager := gitignore.NewManager(dir)
+	seed := gitignore.BuildManagedBlock([]string{"go"}, "bin/\n")
+	if _, err := manager.UpsertManagedBlock(seed, false); err != nil {
+		t.Fatalf("seed failed: %v", err)
+	}
+
+	client := &fakeAPI{available: []string{"node"}, template: "generated\n"}
+	svc := &Service{CWD: dir, Client: client, Manager: manager}
+
+	res, err := svc.Add(context.Background(), AddOptions{Keys: []string{"node"}})
+	if err != nil {
+		t.Fatalf("add failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.AddedProviders, []string{"node"}) {
+		t.Fatalf("unexpected added providers: %v", res.AddedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"go", "node"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"go", "node"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
+	}
+	if !containsString(res.RemoteProviderWarnings, "supported provider missing remotely: go") {
+		t.Fatalf("expected remote drift warning for omitted provider, got %v", res.RemoteProviderWarnings)
 	}
 }
 
@@ -876,14 +937,11 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	if !strings.Contains(string(secondContent), ".env\n.env.*\n!.env.example\n!.env.ci\n# END genignore\n") {
 		t.Fatalf("expected normalized env rules in deterministic order\n%s", string(secondContent))
 	}
-	if strings.Contains(string(secondContent), "# local rule\n.env\n") {
-		t.Fatalf("expected unmanaged duplicate env line to be removed\n%s", string(secondContent))
-	}
 	if string(firstContent) != string(secondContent) {
 		t.Fatalf("expected rerun to remain byte-stable\nfirst:\n%s\nsecond:\n%s", string(firstContent), string(secondContent))
 	}
-	if !strings.HasSuffix(string(secondContent), "# local rule\n") {
-		t.Fatalf("expected unmanaged trailing lines preserved\n%s", string(secondContent))
+	if !strings.HasSuffix(string(secondContent), "# local rule\n.env\n") {
+		t.Fatalf("expected unmanaged trailing lines preserved exactly\n%s", string(secondContent))
 	}
 }
 
@@ -1049,7 +1107,7 @@ func countExactLine(content, line string) int {
 	return count
 }
 
-func TestDetectPreservesRootManagedOSProvidersWhenPackagesDirectoryExists(t *testing.T) {
+func TestDetectDropsRootManagedOSProvidersWhenPackagesDirectoryExists(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1080,13 +1138,13 @@ func TestDetectPreservesRootManagedOSProvidersWhenPackagesDirectoryExists(t *tes
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
 	}
-	if !reflect.DeepEqual(res.FinalProviders, []string{"go", "macos"}) {
-		t.Fatalf("expected root managed OS provider to be preserved, got %v", res.FinalProviders)
+	if !reflect.DeepEqual(res.FinalProviders, []string{"go"}) {
+		t.Fatalf("expected detect to drop stale root managed OS providers, got %v", res.FinalProviders)
 	}
 	if len(res.Targets) != 0 {
 		t.Fatalf("expected single-directory detect without target fanout, got %+v", res.Targets)
 	}
-	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"go", "macos"}) {
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"go"}) {
 		t.Fatalf("unexpected template requests: %v", client.requests)
 	}
 }

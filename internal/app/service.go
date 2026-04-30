@@ -43,12 +43,6 @@ type AddOptions struct {
 	Verbose bool
 }
 
-var detectCarryForwardOSProviders = map[string]struct{}{
-	"linux":   {},
-	"macos":   {},
-	"windows": {},
-}
-
 func NewService(cwd string, cfg Config) *Service {
 	return &Service{
 		CWD:       cwd,
@@ -88,14 +82,13 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 		TemplateProviderCount:  targetResult.TemplateProviderCount,
 	}, nil
 }
-
 func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *gitignore.Manager, include []string, exclude []string, dryRun bool) (TargetResult, error) {
 	targetResult, err := s.scanTarget(ctx, targetPath)
 	if err != nil {
 		return TargetResult{}, err
 	}
 
-	finalProviders, err := s.detectFinalProviders(targetResult.DetectedProviders, manager, include, exclude)
+	finalProviders, err := s.detectFinalProviders(targetResult.DetectedProviders, include, exclude)
 	if err != nil {
 		return TargetResult{}, err
 	}
@@ -154,18 +147,8 @@ func (s *Service) scanTarget(ctx context.Context, targetPath string) (TargetResu
 	}, nil
 }
 
-func (s *Service) detectFinalProviders(detectedProviders []string, manager *gitignore.Manager, include []string, exclude []string) ([]string, error) {
-	existingManagedProviders, err := manager.ReadManagedProviders()
-	if err != nil {
-		return nil, err
-	}
-
+func (s *Service) detectFinalProviders(detectedProviders []string, include []string, exclude []string) ([]string, error) {
 	final := makeSet(detectedProviders)
-	for _, key := range existingManagedProviders {
-		if shouldCarryForwardDetectedManagedProvider(key) {
-			final[key] = struct{}{}
-		}
-	}
 	for _, key := range include {
 		final[key] = struct{}{}
 	}
@@ -254,6 +237,9 @@ func sanitizeKeys(keys []string) ([]string, []string) {
 	set := make(map[string]struct{})
 	warnings := make([]string, 0)
 	for _, key := range keys {
+		if key == "" {
+			continue
+		}
 		if !provider.IsSupported(key) {
 			warnings = append(warnings, fmt.Sprintf("unsupported provider key: %s", key))
 			continue
@@ -261,8 +247,7 @@ func sanitizeKeys(keys []string) ([]string, []string) {
 		set[key] = struct{}{}
 	}
 	slices.Sort(warnings)
-	clean := mapKeysSorted(set)
-	return clean, warnings
+	return mapKeysSorted(set), warnings
 }
 
 func filterSupportedKeys(keys []string) []string {
@@ -308,9 +293,4 @@ func mapKeysSorted(m map[string]struct{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-func shouldCarryForwardDetectedManagedProvider(key string) bool {
-	_, ok := detectCarryForwardOSProviders[key]
-	return ok
 }

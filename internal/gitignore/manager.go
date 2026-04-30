@@ -251,9 +251,7 @@ func mergeManagedBlock(existing, block string) (string, error) {
 	if malformed {
 		return "", fmt.Errorf("malformed managed markers in .gitignore: ensure exactly one %q and one %q in order", StartMarker, EndMarker)
 	}
-	managedRules := buildManagedRuleIndex(block)
 	if !hasMarkers {
-		existing = dedupeUnmanagedLines(existing, managedRules)
 		if existing == "" {
 			return block, nil
 		}
@@ -263,83 +261,7 @@ func mergeManagedBlock(existing, block string) (string, error) {
 		return block + "\n" + existing, nil
 	}
 
-	prefix := dedupeUnmanagedLines(existing[:start], managedRules)
-	suffix := dedupeUnmanagedLines(existing[end:], managedRules)
-	return prefix + block + suffix, nil
-}
-
-type managedRuleIndex struct {
-	exact                   map[string]struct{}
-	unrootedLiteralBasename map[string]struct{}
-	unrootedLiteralPath     map[string]struct{}
-}
-
-func buildManagedRuleIndex(block string) managedRuleIndex {
-	index := managedRuleIndex{
-		exact:                   make(map[string]struct{}),
-		unrootedLiteralBasename: make(map[string]struct{}),
-		unrootedLiteralPath:     make(map[string]struct{}),
-	}
-
-	for _, line := range strings.Split(block, "\n") {
-		if !isRuleLine(line) {
-			continue
-		}
-
-		index.exact[line] = struct{}{}
-		if isUnrootedLiteralBasename(line) {
-			index.unrootedLiteralBasename[line] = struct{}{}
-		}
-		if isUnrootedLiteralPath(line) {
-			index.unrootedLiteralPath[line] = struct{}{}
-		}
-	}
-
-	return index
-}
-
-func dedupeUnmanagedLines(content string, managed managedRuleIndex) string {
-	if content == "" {
-		return content
-	}
-
-	lines := strings.Split(content, "\n")
-	filtered := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if shouldRemoveAsManagedDuplicate(line, managed) {
-			continue
-		}
-		filtered = append(filtered, line)
-	}
-
-	return strings.Join(filtered, "\n")
-}
-
-func shouldRemoveAsManagedDuplicate(line string, managed managedRuleIndex) bool {
-	if !isRuleLine(line) {
-		return false
-	}
-	if _, exists := managed.exact[line]; exists {
-		return true
-	}
-
-	if strings.HasPrefix(line, "/") {
-		candidate := strings.TrimPrefix(line, "/")
-		if isUnrootedLiteralBasename(candidate) {
-			_, exists := managed.unrootedLiteralBasename[candidate]
-			return exists
-		}
-	}
-
-	if strings.HasSuffix(line, "/") {
-		candidate := strings.TrimSuffix(line, "/")
-		if isUnrootedLiteralPath(candidate) {
-			_, exists := managed.unrootedLiteralPath[candidate]
-			return exists
-		}
-	}
-
-	return false
+	return existing[:start] + block + existing[end:], nil
 }
 
 func isRuleLine(line string) bool {
