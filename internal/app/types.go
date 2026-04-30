@@ -22,10 +22,11 @@ type CommandResult struct {
 }
 
 type TargetResult struct {
-	Path                  string               `json:"path"`
-	DetectedProviders     []string             `json:"detectedProviders,omitempty"`
-	FinalProviders        []string             `json:"finalProviders"`
-	DetectionResults      []provider.Result    `json:"detectionResults,omitempty"`
-	FileAction            gitignore.FileAction `json:"fileAction"`
-	TemplateProviderCount int                  `json:"templateProviderCount"`
+	Path                   string               `json:"path"`
+	DetectedProviders      []string             `json:"detectedProviders,omitempty"`
+	FinalProviders         []string             `json:"finalProviders"`
+	DetectionResults       []provider.Result    `json:"detectionResults,omitempty"`
+	RemoteProviderWarnings []string             `json:"-"`
+	FileAction             gitignore.FileAction `json:"fileAction"`
+	TemplateProviderCount  int                  `json:"templateProviderCount"`
 }

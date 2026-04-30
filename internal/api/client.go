@@ -20,8 +20,9 @@ const (
 )
 
 type TemplateResponse struct {
-	Providers []string `json:"providers"`
-	Content   string   `json:"content"`
+	Providers          []string `json:"providers"`
+	Content            string   `json:"content"`
+	AvailableProviders []string `json:"-"`
 }
 
 type Client struct {
@@ -56,6 +57,7 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 	if len(providers) == 0 {
 		return TemplateResponse{}, fmt.Errorf("providers must not be empty")
 	}
+	var availableProviders []string
 	remoteProviders := make([]string, 0, len(providers))
 	customProviders := make([]string, 0, len(providers))
 	for _, key := range providers {
@@ -72,6 +74,7 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 		if err != nil {
 			return TemplateResponse{}, err
 		}
+		availableProviders = sortedCatalogProviders(catalog)
 		for _, key := range remoteProviders {
 			templatePath, ok := catalog[key]
 			if !ok {
@@ -95,7 +98,7 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 		parts = append(parts, customContent)
 	}
 
-	return TemplateResponse{Providers: providers, Content: strings.Join(parts, "\n\n")}, nil
+	return TemplateResponse{Providers: providers, Content: strings.Join(parts, "\n\n"), AvailableProviders: availableProviders}, nil
 }
 
 func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, error) {
@@ -175,6 +178,15 @@ func decodeProviderCatalog(body []byte) (map[string]string, error) {
 		return nil, fmt.Errorf("no gitignore templates found")
 	}
 	return catalog, nil
+}
+
+func sortedCatalogProviders(catalog map[string]string) []string {
+	providers := make([]string, 0, len(catalog))
+	for key := range catalog {
+		providers = append(providers, key)
+	}
+	slices.Sort(providers)
+	return providers
 }
 
 func isCatalogTemplatePath(templatePath string) bool {

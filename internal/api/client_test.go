@@ -234,6 +234,39 @@ func TestFetchTemplateMergesRemoteAndEmbeddedCustomTemplates(t *testing.T) {
 	}
 }
 
+func TestFetchTemplateUsesSingleCatalogLookupForRemoteProviders(t *testing.T) {
+	t.Parallel()
+
+	catalogRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/catalog":
+			catalogRequests++
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"}]}`))
+		case "/templates/Go.gitignore":
+			_, _ = w.Write([]byte("bin/\n"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.listURL = server.URL + "/catalog"
+	client.templateURL = server.URL + "/templates/"
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"ai-agents", "go"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if catalogRequests != 1 {
+		t.Fatalf("expected one catalog request, got %d", catalogRequests)
+	}
+	if !reflect.DeepEqual(resp.AvailableProviders, []string{"go"}) {
+		t.Fatalf("unexpected available providers: %v", resp.AvailableProviders)
+	}
+}
+
 func TestFetchTemplateMergesRemoteAndWranglerEmbeddedTemplates(t *testing.T) {
 	t.Parallel()
 

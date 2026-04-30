@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"github.com/aaronflorey/genignore/internal/api"
-	"github.com/aaronflorey/genignore/internal/customtemplate"
 	"github.com/aaronflorey/genignore/internal/gitignore"
 	"github.com/aaronflorey/genignore/internal/provider"
 )
@@ -75,11 +74,6 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 		return CommandResult{}, err
 	}
 
-	remoteWarnings, err := s.remoteWarnings(ctx, targetResult.FinalProviders)
-	if err != nil {
-		return CommandResult{}, err
-	}
-
 	return CommandResult{
 		Command:                "detect",
 		CWD:                    s.CWD,
@@ -88,7 +82,7 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 		ExcludedProviders:      exclude,
 		FinalProviders:         targetResult.FinalProviders,
 		UnsupportedKeyWarnings: warnings,
-		RemoteProviderWarnings: remoteWarnings,
+		RemoteProviderWarnings: targetResult.RemoteProviderWarnings,
 		DetectionResults:       targetResult.DetectionResults,
 		FileAction:             targetResult.FileAction,
 		TemplateProviderCount:  targetResult.TemplateProviderCount,
@@ -115,6 +109,7 @@ func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *
 	if err != nil {
 		return TargetResult{}, err
 	}
+	remoteWarnings := remoteWarningsFromTemplate(template)
 
 	relPath, relErr := filepath.Rel(s.CWD, targetPath)
 	if relErr != nil {
@@ -122,12 +117,13 @@ func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *
 	}
 
 	return TargetResult{
-		Path:                  relPath,
-		DetectedProviders:     targetResult.DetectedProviders,
-		FinalProviders:        finalProviders,
-		DetectionResults:      targetResult.DetectionResults,
-		FileAction:            action,
-		TemplateProviderCount: len(template.Providers),
+		Path:                   relPath,
+		DetectedProviders:      targetResult.DetectedProviders,
+		FinalProviders:         finalProviders,
+		DetectionResults:       targetResult.DetectionResults,
+		RemoteProviderWarnings: remoteWarnings,
+		FileAction:             action,
+		TemplateProviderCount:  len(template.Providers),
 	}, nil
 }
 
@@ -231,11 +227,6 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 		return CommandResult{}, fmt.Errorf("no providers available to add")
 	}
 
-	remoteWarnings, err := s.remoteWarnings(ctx, finalProviders)
-	if err != nil {
-		return CommandResult{}, err
-	}
-
 	template, err := s.Client.FetchTemplate(ctx, finalProviders)
 	if err != nil {
 		return CommandResult{}, err
@@ -253,7 +244,7 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 		AddedProviders:         added,
 		FinalProviders:         finalProviders,
 		UnsupportedKeyWarnings: warnings,
-		RemoteProviderWarnings: remoteWarnings,
+		RemoteProviderWarnings: remoteWarningsFromTemplate(template),
 		FileAction:             action,
 		TemplateProviderCount:  len(template.Providers),
 	}, nil
@@ -284,25 +275,11 @@ func filterSupportedKeys(keys []string) []string {
 	return filtered
 }
 
-func (s *Service) remoteWarnings(ctx context.Context, providers []string) ([]string, error) {
-	if !hasRemoteProvider(providers) {
-		return nil, nil
+func remoteWarningsFromTemplate(template api.TemplateResponse) []string {
+	if len(template.AvailableProviders) == 0 {
+		return nil
 	}
-
-	availableRemote, err := s.Client.AvailableProviders(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return remoteDiffWarnings(makeSet(availableRemote)), nil
-}
-
-func hasRemoteProvider(providers []string) bool {
-	for _, key := range providers {
-		if !customtemplate.HasProvider(key) {
-			return true
-		}
-	}
-	return false
+	return remoteDiffWarnings(makeSet(template.AvailableProviders))
 }
 
 func remoteDiffWarnings(remote map[string]struct{}) []string {

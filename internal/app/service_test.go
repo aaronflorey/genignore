@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/aaronflorey/genignore/internal/api"
+	"github.com/aaronflorey/genignore/internal/customtemplate"
 	"github.com/aaronflorey/genignore/internal/gitignore"
 	"github.com/aaronflorey/genignore/internal/provider"
 )
@@ -31,12 +32,12 @@ const noisyToptalTemplate = `# Created by https://www.toptal.com/developers/giti
 `
 
 type fakeAPI struct {
-	available    []string
-	template     string
-	availableErr error
-	templateErr  error
+	available      []string
+	template       string
+	availableErr   error
+	templateErr    error
 	availableCalls int
-	requests     [][]string
+	requests       [][]string
 }
 
 func (f *fakeAPI) AvailableProviders(_ context.Context) ([]string, error) {
@@ -51,8 +52,15 @@ func (f *fakeAPI) FetchTemplate(_ context.Context, providers []string) (api.Temp
 	if f.templateErr != nil {
 		return api.TemplateResponse{}, f.templateErr
 	}
+	if f.availableErr != nil {
+		for _, key := range providers {
+			if !customtemplate.HasProvider(key) {
+				return api.TemplateResponse{}, f.availableErr
+			}
+		}
+	}
 	f.requests = append(f.requests, append([]string{}, providers...))
-	return api.TemplateResponse{Providers: providers, Content: f.template}, nil
+	return api.TemplateResponse{Providers: providers, Content: f.template, AvailableProviders: f.available}, nil
 }
 
 func matchedDetector(key string) provider.Detector {
@@ -191,6 +199,9 @@ func TestAddAppendsOnlyMissingProviders(t *testing.T) {
 	if !reflect.DeepEqual(res.FinalProviders, []string{"go", "node"}) {
 		t.Fatalf("expected alphabetical final set, got %v", res.FinalProviders)
 	}
+	if client.availableCalls != 0 {
+		t.Fatalf("expected add to reuse template catalog data, got %d separate calls", client.availableCalls)
+	}
 }
 
 func TestUnsupportedWarnings(t *testing.T) {
@@ -254,6 +265,9 @@ func TestRemoteProviderDriftWarning(t *testing.T) {
 	}
 	if len(res.RemoteProviderWarnings) == 0 {
 		t.Fatalf("expected remote provider drift warning")
+	}
+	if client.availableCalls != 0 {
+		t.Fatalf("expected detect to reuse template catalog data, got %d separate calls", client.availableCalls)
 	}
 	for _, warning := range []string{
 		"supported provider missing remotely: angular",
