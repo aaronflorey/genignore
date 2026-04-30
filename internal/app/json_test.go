@@ -140,6 +140,36 @@ func TestJSONAddCommandContractOmitsDetectOnlyFields(t *testing.T) {
 	}
 }
 
+func TestJSONDetectNoOpFileActionContract(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{detectResult: CommandResult{
+			Command:               "detect",
+			CWD:                   "/tmp/project",
+			FinalProviders:        []string{"go"},
+			FileAction:            gitignore.FileActionNoOp,
+			TemplateProviderCount: 1,
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"detect", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+
+	var payload CommandResult
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("invalid json output: %v", err)
+	}
+	if payload.FileAction != gitignore.FileActionNoOp {
+		t.Fatalf("unexpected no-op file action: %s", payload.FileAction)
+	}
+}
+
 func TestJSONListCatalogContract(t *testing.T) {
 	exitCode, stdout, stderr := captureRunOutput(t, []string{"list", "--json"})
 	if exitCode != 0 {

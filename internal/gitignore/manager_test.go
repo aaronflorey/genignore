@@ -282,16 +282,24 @@ func TestUpsertIsIdempotentForEquivalentRun(t *testing.T) {
 	m := NewManager(dir)
 	block := BuildManagedBlock([]string{"go", "node"}, "bin/\nnode_modules/\n")
 
-	if _, err := m.UpsertManagedBlock(block, false); err != nil {
+	firstAction, err := m.UpsertManagedBlock(block, false)
+	if err != nil {
 		t.Fatalf("first upsert failed: %v", err)
+	}
+	if firstAction != FileActionCreated {
+		t.Fatalf("expected created action on first upsert, got %s", firstAction)
 	}
 	first, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read first content failed: %v", err)
 	}
 
-	if _, err := m.UpsertManagedBlock(block, false); err != nil {
+	secondAction, err := m.UpsertManagedBlock(block, false)
+	if err != nil {
 		t.Fatalf("second upsert failed: %v", err)
+	}
+	if secondAction != FileActionNoOp {
+		t.Fatalf("expected no-op action on equivalent rerun, got %s", secondAction)
 	}
 	second, err := os.ReadFile(path)
 	if err != nil {
@@ -306,8 +314,12 @@ func TestUpsertIsIdempotentForEquivalentRun(t *testing.T) {
 		t.Fatalf("stat first content failed: %v", err)
 	}
 	time.Sleep(20 * time.Millisecond)
-	if _, err := m.UpsertManagedBlock(block, false); err != nil {
+	thirdAction, err := m.UpsertManagedBlock(block, false)
+	if err != nil {
 		t.Fatalf("third upsert failed: %v", err)
+	}
+	if thirdAction != FileActionNoOp {
+		t.Fatalf("expected no-op action on repeated equivalent rerun, got %s", thirdAction)
 	}
 	secondInfo, err := os.Stat(path)
 	if err != nil {

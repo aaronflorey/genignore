@@ -862,7 +862,7 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second add failed: %v", err)
 	}
-	if second.FileAction != gitignore.FileActionUpdated {
+	if second.FileAction != gitignore.FileActionNoOp {
 		t.Fatalf("unexpected second add action: %s", second.FileAction)
 	}
 	secondContent, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
@@ -884,6 +884,37 @@ func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	}
 	if !strings.HasSuffix(string(secondContent), "# local rule\n") {
 		t.Fatalf("expected unmanaged trailing lines preserved\n%s", string(secondContent))
+	}
+}
+
+func TestDetectEquivalentRerunReportsNoOp(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: noisyToptalTemplate}
+	svc := &Service{
+		CWD:     dir,
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"go": matchedDetector("go"),
+		},
+	}
+
+	first, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("first detect failed: %v", err)
+	}
+	if first.FileAction != gitignore.FileActionCreated {
+		t.Fatalf("unexpected first detect action: %s", first.FileAction)
+	}
+
+	second, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("second detect failed: %v", err)
+	}
+	if second.FileAction != gitignore.FileActionNoOp {
+		t.Fatalf("unexpected second detect action: %s", second.FileAction)
 	}
 }
 

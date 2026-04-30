@@ -176,4 +176,5 @@ golangci-lint run
 - The tool scans the current directory and one level of non-ignored subdirectories.
 - Unsupported provider keys are reported as warnings while valid keys still proceed.
 - Re-running equivalent commands should not create unnecessary `.gitignore` churn.
+- Byte-identical reruns surface `fileAction: no-op` instead of `updated`, while `dry-run` remains a preview-only outcome.
 - Node detection treats `package.json`, `bun.lock`, and `bun.lockb` as project signals.

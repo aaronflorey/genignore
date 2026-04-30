@@ -183,6 +183,29 @@ func TestAddDefaultCommandOutputShowsWarningsAndFileAction(t *testing.T) {
 	}
 }
 
+func TestDetectDefaultCommandOutputShowsNoOpFileAction(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{detectResult: CommandResult{
+			Command:        "detect",
+			FinalProviders: []string{"go"},
+			FileAction:     gitignore.FileActionNoOp,
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"detect"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	if !strings.Contains(stdout, "File: no-op") {
+		t.Fatalf("missing no-op file action: %s", stdout)
+	}
+}
+
 func TestDetectVerboseCommandShowsEvidence(t *testing.T) {
 	oldFactory := newCommandService
 	newCommandService = func(string, Config) commandService {

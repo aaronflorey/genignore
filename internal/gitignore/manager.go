@@ -18,6 +18,7 @@ type FileAction string
 const (
 	FileActionCreated FileAction = "created"
 	FileActionUpdated FileAction = "updated"
+	FileActionNoOp    FileAction = "no-op"
 	FileActionDryRun  FileAction = "dry-run"
 )
 
@@ -237,7 +238,7 @@ func (m *Manager) UpsertManagedBlock(block string, dryRun bool) (FileAction, err
 		return FileActionDryRun, nil
 	}
 	if updated == existing {
-		return FileActionUpdated, nil
+		return FileActionNoOp, nil
 	}
 	if writeErr := os.WriteFile(m.Path, []byte(updated), 0o644); writeErr != nil {
 		return "", fmt.Errorf("update .gitignore: %w", writeErr)
