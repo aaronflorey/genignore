@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/aaronflorey/genignore/internal/customtemplate"
@@ -13,9 +14,18 @@ var remoteSupportedKeys = []string{
 var (
 	SupportedKeys []string
 	supportedSet  map[string]struct{}
+	initErr       error
 )
 
 func init() {
+	SupportedKeys = []string{}
+	supportedSet = map[string]struct{}{}
+
+	if err := customtemplate.InitError(); err != nil {
+		initErr = fmt.Errorf("load embedded custom templates: %w", err)
+		return
+	}
+
 	remoteSet := make(map[string]struct{}, len(remoteSupportedKeys))
 	for _, key := range remoteSupportedKeys {
 		remoteSet[key] = struct{}{}
@@ -24,7 +34,10 @@ func init() {
 	SupportedKeys = append([]string(nil), remoteSupportedKeys...)
 	for _, key := range customtemplate.ProviderKeys() {
 		if _, exists := remoteSet[key]; exists {
-			panic("embedded custom template key collides with remote provider key: " + key)
+			initErr = fmt.Errorf("embedded custom template key collides with remote provider key: %s", key)
+			SupportedKeys = []string{}
+			supportedSet = map[string]struct{}{}
+			return
 		}
 		SupportedKeys = append(SupportedKeys, key)
 	}
@@ -35,6 +48,10 @@ func init() {
 	for _, key := range SupportedKeys {
 		supportedSet[key] = struct{}{}
 	}
+}
+
+func InitError() error {
+	return initErr
 }
 
 func RemoteSupportedKeys() []string {

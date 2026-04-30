@@ -171,6 +171,12 @@ func TestJSONDetectNoOpFileActionContract(t *testing.T) {
 }
 
 func TestJSONListCatalogContract(t *testing.T) {
+	oldCatalogClient := newCatalogClient
+	newCatalogClient = func() providerCatalog {
+		return stubCatalogClient{providers: []string{"go", "macos", "node"}}
+	}
+	t.Cleanup(func() { newCatalogClient = oldCatalogClient })
+
 	exitCode, stdout, stderr := captureRunOutput(t, []string{"list", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d", exitCode)
@@ -195,6 +201,12 @@ func TestJSONListCatalogContract(t *testing.T) {
 }
 
 func TestJSONSearchCatalogContract(t *testing.T) {
+	oldCatalogClient := newCatalogClient
+	newCatalogClient = func() providerCatalog {
+		return stubCatalogClient{providers: []string{"go", "goland", "macos", "node"}}
+	}
+	t.Cleanup(func() { newCatalogClient = oldCatalogClient })
+
 	exitCode, stdout, stderr := captureRunOutput(t, []string{"search", "go", "--json"})
 	if exitCode != 0 {
 		t.Fatalf("unexpected exit code: %d", exitCode)

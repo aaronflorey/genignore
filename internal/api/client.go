@@ -9,6 +9,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aaronflorey/genignore/internal/customtemplate"
@@ -29,6 +30,9 @@ type Client struct {
 	httpClient  *http.Client
 	listURL     string
 	templateURL string
+
+	catalogMu sync.Mutex
+	catalog   map[string]string
 }
 
 func NewClient() *Client {
@@ -102,6 +106,14 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 }
 
 func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, error) {
+	c.catalogMu.Lock()
+	if c.catalog != nil {
+		catalog := cloneCatalog(c.catalog)
+		c.catalogMu.Unlock()
+		return catalog, nil
+	}
+	c.catalogMu.Unlock()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.listURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build list request: %w", err)
@@ -124,6 +136,11 @@ func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, e
 	if err != nil {
 		return nil, fmt.Errorf("decode list API response: %w", err)
 	}
+
+	c.catalogMu.Lock()
+	c.catalog = cloneCatalog(catalog)
+	c.catalogMu.Unlock()
+
 	return catalog, nil
 }
 
@@ -202,4 +219,12 @@ func preferCatalogPath(candidate string, existing string) bool {
 		return strings.Count(candidate, "/") < strings.Count(existing, "/")
 	}
 	return candidate < existing
+}
+
+func cloneCatalog(catalog map[string]string) map[string]string {
+	cloned := make(map[string]string, len(catalog))
+	for key, value := range catalog {
+		cloned[key] = value
+	}
+	return cloned
 }

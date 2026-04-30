@@ -22,6 +22,11 @@ type stubCommandService struct {
 	addErr       error
 }
 
+type stubCatalogClient struct {
+	providers []string
+	err       error
+}
+
 func (s stubCommandService) Detect(_ context.Context, _ DetectOptions) (CommandResult, error) {
 	return s.detectResult, s.detectErr
 }
@@ -30,7 +35,20 @@ func (s stubCommandService) Add(_ context.Context, _ AddOptions) (CommandResult,
 	return s.addResult, s.addErr
 }
 
+func (s stubCatalogClient) AvailableProviders(_ context.Context) ([]string, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return append([]string(nil), s.providers...), nil
+}
+
 func TestListCommand(t *testing.T) {
+	oldCatalogClient := newCatalogClient
+	newCatalogClient = func() providerCatalog {
+		return stubCatalogClient{providers: []string{"go", "macos", "node"}}
+	}
+	t.Cleanup(func() { newCatalogClient = oldCatalogClient })
+
 	_, stdout, stderr := captureRunOutput(t, []string{"list"})
 	if stderr != "" {
 		t.Fatalf("unexpected stderr: %s", stderr)
@@ -53,6 +71,12 @@ func TestListCommand(t *testing.T) {
 }
 
 func TestSearchCommand(t *testing.T) {
+	oldCatalogClient := newCatalogClient
+	newCatalogClient = func() providerCatalog {
+		return stubCatalogClient{providers: []string{"go", "goland", "macos", "node"}}
+	}
+	t.Cleanup(func() { newCatalogClient = oldCatalogClient })
+
 	_, stdout, stderr := captureRunOutput(t, []string{"search", "go"})
 	if stderr != "" {
 		t.Fatalf("unexpected stderr: %s", stderr)
@@ -83,6 +107,12 @@ func TestSearchCommand(t *testing.T) {
 }
 
 func TestSearchCommandJSON(t *testing.T) {
+	oldCatalogClient := newCatalogClient
+	newCatalogClient = func() providerCatalog {
+		return stubCatalogClient{providers: []string{"go", "goland", "macos", "node"}}
+	}
+	t.Cleanup(func() { newCatalogClient = oldCatalogClient })
+
 	_, stdout, stderr := captureRunOutput(t, []string{"search", "go", "--json"})
 	if stderr != "" {
 		t.Fatalf("unexpected stderr: %s", stderr)

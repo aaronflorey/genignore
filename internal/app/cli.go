@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/aaronflorey/genignore/internal/api"
 	"github.com/aaronflorey/genignore/internal/provider"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -22,7 +23,16 @@ var newCommandService = func(cwd string, cfg Config) commandService {
 	return NewService(cwd, cfg)
 }
 
+var newCatalogClient = func() providerCatalog {
+	return api.NewClient()
+}
+
 func Run(args []string) int {
+	if err := runtimeInitError(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to get working directory: %v\n", err)
@@ -36,6 +46,7 @@ func Run(args []string) int {
 	}
 
 	service := newCommandService(cwd, cfg)
+	catalogClient := newCatalogClient()
 	root := &cobra.Command{
 		Use:   "genignore",
 		Short: "Generate and manage gitignore block",
@@ -93,9 +104,13 @@ func Run(args []string) int {
 		Use:   "list",
 		Short: "List all supported provider keys",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			providers, err := ListProviders(context.Background(), catalogClient)
+			if err != nil {
+				return err
+			}
 			printCatalogResult(CatalogResult{
 				Command:   "list",
-				Providers: ListProviders(),
+				Providers: providers,
 			}, jsonOutput)
 			return nil
 		},
@@ -107,10 +122,14 @@ func Run(args []string) int {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			term := args[0]
+			providers, err := SearchProviders(context.Background(), catalogClient, term)
+			if err != nil {
+				return err
+			}
 			printCatalogResult(CatalogResult{
 				Command:   "search",
 				Query:     term,
-				Providers: SearchProviders(term),
+				Providers: providers,
 			}, jsonOutput)
 			return nil
 		},

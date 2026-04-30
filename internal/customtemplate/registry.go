@@ -13,15 +13,24 @@ var templateFS embed.FS
 var (
 	providerKeys []string
 	byKey        map[string]string
+	initErr      error
 )
 
 func init() {
+	providerKeys = []string{}
+	byKey = map[string]string{}
+
 	keys, templates, err := loadDefinitions()
 	if err != nil {
-		panic(err)
+		initErr = err
+		return
 	}
 	providerKeys = keys
 	byKey = templates
+}
+
+func InitError() error {
+	return initErr
 }
 
 func ProviderKeys() []string {
@@ -34,6 +43,10 @@ func HasProvider(key string) bool {
 }
 
 func ContentForProviders(keys []string) (string, error) {
+	if initErr != nil {
+		return "", initErr
+	}
+
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
 		content, ok := byKey[key]

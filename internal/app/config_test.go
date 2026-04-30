@@ -96,6 +96,12 @@ func TestRunInvalidConfigReturnsError(t *testing.T) {
 		return nil
 	}
 	t.Cleanup(func() { newCommandService = oldFactory })
+	oldCatalogClient := newCatalogClient
+	newCatalogClient = func() providerCatalog {
+		t.Fatal("catalog client should not be created when config is invalid")
+		return nil
+	}
+	t.Cleanup(func() { newCatalogClient = oldCatalogClient })
 
 	exitCode, stdout, stderr := captureRunOutputWithHome(t, []string{"list"}, home)
 	if exitCode != 1 {

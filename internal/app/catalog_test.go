@@ -1,18 +1,20 @@
 package app
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/aaronflorey/genignore/internal/provider"
 )
 
 func TestListProviders(t *testing.T) {
 	t.Parallel()
 
-	got := ListProviders()
-	want := append([]string(nil), provider.SupportedKeys...)
+	got, err := ListProviders(context.Background(), stubCatalogClient{providers: []string{"go", "macos", "node"}})
+	if err != nil {
+		t.Fatalf("ListProviders failed: %v", err)
+	}
+	want := []string{"ai-agents", "go", "macos", "node", "wrangler"}
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
@@ -23,7 +25,10 @@ func TestListProviders(t *testing.T) {
 func TestSearchProviders(t *testing.T) {
 	t.Parallel()
 
-	got := SearchProviders("go")
+	got, err := SearchProviders(context.Background(), stubCatalogClient{providers: []string{"go", "goland", "macos", "node"}}, "go")
+	if err != nil {
+		t.Fatalf("SearchProviders failed: %v", err)
+	}
 	if len(got) == 0 {
 		t.Fatalf("expected at least one provider match")
 	}
@@ -40,7 +45,10 @@ func TestSearchProviders(t *testing.T) {
 func TestSearchProvidersNoMatches(t *testing.T) {
 	t.Parallel()
 
-	got := SearchProviders("__no_match__")
+	got, err := SearchProviders(context.Background(), stubCatalogClient{providers: []string{"go", "macos", "node"}}, "__no_match__")
+	if err != nil {
+		t.Fatalf("SearchProviders failed: %v", err)
+	}
 	if len(got) != 0 {
 		t.Fatalf("expected no provider matches, got %v", got)
 	}
