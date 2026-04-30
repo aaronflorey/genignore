@@ -35,10 +35,12 @@ type fakeAPI struct {
 	template     string
 	availableErr error
 	templateErr  error
+	availableCalls int
 	requests     [][]string
 }
 
 func (f *fakeAPI) AvailableProviders(_ context.Context) ([]string, error) {
+	f.availableCalls++
 	if f.availableErr != nil {
 		return nil, f.availableErr
 	}
@@ -295,6 +297,64 @@ func TestDetectAcceptsEmbeddedExceptionProvider(t *testing.T) {
 	}
 	if len(res.UnsupportedKeyWarnings) != 0 {
 		t.Fatalf("unexpected unsupported warnings: %v", res.UnsupportedKeyWarnings)
+	}
+}
+
+func TestDetectCustomOnlySucceedsWithoutRemoteCatalog(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{availableErr: errors.New("catalog boom"), template: "generated\n"}
+	svc := &Service{
+		CWD:       dir,
+		Client:    client,
+		Manager:   gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{"node": matchedDetector("node")},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{Include: []string{"wrangler"}, Exclude: []string{"node"}})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"wrangler"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if client.availableCalls != 0 {
+		t.Fatalf("expected detect to skip remote catalog lookup, got %d calls", client.availableCalls)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"wrangler"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
+	}
+	if len(res.RemoteProviderWarnings) != 0 {
+		t.Fatalf("unexpected remote warnings: %v", res.RemoteProviderWarnings)
+	}
+	if res.FileAction != gitignore.FileActionCreated {
+		t.Fatalf("unexpected file action: %s", res.FileAction)
+	}
+}
+
+func TestAddCustomOnlySucceedsWithoutRemoteCatalog(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{availableErr: errors.New("catalog boom"), template: "generated\n"}
+	svc := &Service{CWD: dir, Client: client, Manager: gitignore.NewManager(dir)}
+
+	res, err := svc.Add(context.Background(), AddOptions{Keys: []string{"ai-agents"}})
+	if err != nil {
+		t.Fatalf("add failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"ai-agents"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if client.availableCalls != 0 {
+		t.Fatalf("expected add to skip remote catalog lookup, got %d calls", client.availableCalls)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"ai-agents"}) {
+		t.Fatalf("unexpected template requests: %v", client.requests)
+	}
+	if len(res.RemoteProviderWarnings) != 0 {
+		t.Fatalf("unexpected remote warnings: %v", res.RemoteProviderWarnings)
 	}
 }
 

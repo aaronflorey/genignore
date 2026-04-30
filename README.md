@@ -152,6 +152,7 @@ What that means in practice:
 - `wrangler` includes: `.wrangler/`, `.dev.vars*`, and `!.dev.vars.example`
 - The managed block also keeps `!.env.example` and `!.env.ci` committable through its canonical env-rule section
 - Custom and remote templates can be mixed in one run (for example: `genignore add go ai-agents wrangler`)
+- Runs whose final provider set is only `ai-agents` and/or `wrangler` can still succeed if the remote catalog is temporarily unavailable; mixed or remote-only runs still require remote validation
 
 To add another embedded template in the codebase:
 

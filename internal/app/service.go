@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/aaronflorey/genignore/internal/api"
+	"github.com/aaronflorey/genignore/internal/customtemplate"
 	"github.com/aaronflorey/genignore/internal/gitignore"
 	"github.com/aaronflorey/genignore/internal/provider"
 )
@@ -60,13 +61,6 @@ func NewService(cwd string, cfg Config) *Service {
 }
 
 func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult, error) {
-	availableRemote, err := s.Client.AvailableProviders(ctx)
-	if err != nil {
-		return CommandResult{}, err
-	}
-	remoteSet := makeSet(availableRemote)
-	remoteWarnings := remoteDiffWarnings(remoteSet)
-
 	includeInput := opts.Include
 	if len(includeInput) == 0 {
 		includeInput = s.Config.Defaults.Providers
@@ -77,6 +71,11 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 	warnings := append(includeWarnings, excludeWarnings...)
 
 	targetResult, err := s.detectTarget(ctx, s.CWD, s.Manager, include, exclude, opts.DryRun)
+	if err != nil {
+		return CommandResult{}, err
+	}
+
+	remoteWarnings, err := s.remoteWarnings(ctx, targetResult.FinalProviders)
 	if err != nil {
 		return CommandResult{}, err
 	}
@@ -208,13 +207,6 @@ func sortDetectionResults(results []provider.Result) {
 }
 
 func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, error) {
-	availableRemote, err := s.Client.AvailableProviders(ctx)
-	if err != nil {
-		return CommandResult{}, err
-	}
-	remoteSet := makeSet(availableRemote)
-	remoteWarnings := remoteDiffWarnings(remoteSet)
-
 	inputKeys := make([]string, 0, len(s.Config.Defaults.Providers)+len(opts.Keys))
 	inputKeys = append(inputKeys, s.Config.Defaults.Providers...)
 	inputKeys = append(inputKeys, opts.Keys...)
@@ -237,6 +229,11 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 	finalProviders := mapKeysSorted(final)
 	if len(finalProviders) == 0 {
 		return CommandResult{}, fmt.Errorf("no providers available to add")
+	}
+
+	remoteWarnings, err := s.remoteWarnings(ctx, finalProviders)
+	if err != nil {
+		return CommandResult{}, err
 	}
 
 	template, err := s.Client.FetchTemplate(ctx, finalProviders)
@@ -285,6 +282,27 @@ func filterSupportedKeys(keys []string) []string {
 		}
 	}
 	return filtered
+}
+
+func (s *Service) remoteWarnings(ctx context.Context, providers []string) ([]string, error) {
+	if !hasRemoteProvider(providers) {
+		return nil, nil
+	}
+
+	availableRemote, err := s.Client.AvailableProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return remoteDiffWarnings(makeSet(availableRemote)), nil
+}
+
+func hasRemoteProvider(providers []string) bool {
+	for _, key := range providers {
+		if !customtemplate.HasProvider(key) {
+			return true
+		}
+	}
+	return false
 }
 
 func remoteDiffWarnings(remote map[string]struct{}) []string {
