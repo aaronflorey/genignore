@@ -9,31 +9,39 @@
 go install github.com/aaronflorey/genignore@latest
 ```
 
+<!-- VERIFY: Homebrew installation is available once the tap repository is published. -->
+If you use Homebrew:
+
+```bash
+brew install aaronflorey/tap/genignore
+```
+
 ## Quick start
 
-1. Clone and enter the repository:
+1. Detect providers in the current directory and create or update the managed `.gitignore` block:
+
+```bash
+genignore detect
+```
+
+2. Preview what would change without writing files:
+
+```bash
+genignore detect --dry-run
+```
+
+3. Add specific providers to the existing managed set:
+
+```bash
+genignore add go node
+```
+
+If you are working from source:
 
 ```bash
 git clone https://github.com/aaronflorey/genignore.git
 cd genignore
-```
-
-2. Detect providers and create/update the managed `.gitignore` block:
-
-```bash
 go run . detect
-```
-
-3. Preview changes without writing files:
-
-```bash
-go run . detect --dry-run
-```
-
-4. Add specific providers to the existing managed set:
-
-```bash
-go run . add go node
 ```
 
 ## Usage examples
@@ -50,13 +58,19 @@ Search providers by term:
 genignore search jetbrains
 ```
 
-Run detection with machine-readable output:
+Run detection with machine-readable JSON output:
 
 ```bash
 genignore detect --json
 ```
 
-Example result labels in human-readable mode include `Detected:`, `Final:`, and `File:`.
+Exclude certain providers from detection:
+
+```bash
+genignore detect --exclude windows,macos
+```
+
+Output labels in human-readable mode include `Command:`, `Target:`, `Detected:`, `Final:`, `Added:`, `Included:`, `Excluded:`, `File:`, and `Warning:`.
 
 ## License
 
