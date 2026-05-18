@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 )
 
@@ -120,6 +121,34 @@ func TestPathDetectorMatchesAndMisses(t *testing.T) {
 	missing := pathDetector("visualstudiocode", []string{"missing-binary"}, "found VS Code binary in PATH").Detect(context.Background(), t.TempDir())
 	if missing != (Result{Key: "visualstudiocode", Matched: false, Reason: "binary not found in PATH"}) {
 		t.Fatalf("unexpected missing result: %+v", missing)
+	}
+}
+
+func TestVSCodeDetectorRequiresWorkspaceMetadata(t *testing.T) {
+	binDir := t.TempDir()
+	binaryPath := filepath.Join(binDir, "code")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write binary: %v", err)
+	}
+	t.Setenv("PATH", binDir)
+
+	root := t.TempDir()
+	detector := Registry()["visualstudiocode"]
+
+	missing := detector.Detect(context.Background(), root)
+	if missing != (Result{Key: "visualstudiocode", Matched: false, Reason: "signal not found"}) {
+		t.Fatalf("unexpected missing result: %+v", missing)
+	}
+
+	workspacePath := filepath.Join(root, ".vscode")
+	if err := os.Mkdir(workspacePath, 0o755); err != nil {
+		t.Fatalf("mkdir .vscode: %v", err)
+	}
+
+	matched := detector.Detect(context.Background(), root)
+	expected := Result{Key: "visualstudiocode", Matched: true, Reason: "found VS Code workspace metadata", Evidence: workspacePath}
+	if matched != expected {
+		t.Fatalf("unexpected matched result: %+v", matched)
 	}
 }
 
@@ -340,6 +369,65 @@ func TestJetBrainsLanguageInferenceDoesNotMatchWithoutLanguageSignal(t *testing.
 	expected := Result{Key: "phpstorm", Matched: false, Reason: "application not found"}
 	if result != expected {
 		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestJetBrainsDetectorRequiresProjectMetadata(t *testing.T) {
+	root := t.TempDir()
+	installPath := filepath.Join(root, "opt", "jetbrains-toolbox", "apps", "IDEA-U")
+	if err := os.MkdirAll(installPath, 0o755); err != nil {
+		t.Fatalf("mkdir jetbrains install: %v", err)
+	}
+
+	original := ideInstallCandidatesByKey
+	ideInstallCandidatesByKey = map[string][]string{
+		"jetbrains": {installPath},
+	}
+	t.Cleanup(func() {
+		ideInstallCandidatesByKey = original
+	})
+
+	detector := Registry()["jetbrains"]
+	missing := detector.Detect(context.Background(), root)
+	if missing != (Result{Key: "jetbrains", Matched: false, Reason: "signal not found"}) {
+		t.Fatalf("unexpected missing result: %+v", missing)
+	}
+
+	metadataPath := filepath.Join(root, ".idea")
+	if err := os.Mkdir(metadataPath, 0o755); err != nil {
+		t.Fatalf("mkdir .idea: %v", err)
+	}
+
+	matched := detector.Detect(context.Background(), root)
+	expected := Result{Key: "jetbrains", Matched: true, Reason: "found JetBrains project metadata", Evidence: metadataPath}
+	if matched != expected {
+		t.Fatalf("unexpected matched result: %+v", matched)
+	}
+}
+
+func TestContextWithInputsReusesSearchDirs(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ctx := ContextWithInputs(context.Background(), root)
+	initial := searchDirsFor(ctx, root)
+
+	lateDir := filepath.Join(root, "late")
+	if err := os.Mkdir(lateDir, 0o755); err != nil {
+		t.Fatalf("mkdir late directory: %v", err)
+	}
+
+	cached := searchDirsFor(ctx, root)
+	if !slices.Equal(initial, cached) {
+		t.Fatalf("expected cached search dirs to stay stable, got %v want %v", cached, initial)
+	}
+	if slices.Contains(cached, lateDir) {
+		t.Fatalf("expected cached search dirs to exclude late directory: %v", cached)
+	}
+
+	fresh := searchDirsFor(context.Background(), root)
+	if !slices.Contains(fresh, lateDir) {
+		t.Fatalf("expected fresh search dirs to include late directory: %v", fresh)
 	}
 }
 

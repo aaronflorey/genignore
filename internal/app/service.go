@@ -123,6 +123,7 @@ func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *
 }
 
 func (s *Service) scanTarget(ctx context.Context, targetPath string) (TargetResult, error) {
+	ctx = provider.ContextWithInputs(ctx, targetPath)
 	detections := make([]provider.Result, 0, len(s.Detectors))
 	detected := makeSet(nil)
 	for _, entry := range sortedDetectors(s.Detectors) {

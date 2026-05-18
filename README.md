@@ -90,6 +90,8 @@ The canonical supported-provider contract is the checked-in GitHub catalog snaps
 
 Output labels in human-readable mode include `Command:`, `Target:`, `Detected:`, `Final:`, `Added:`, `Included:`, `Excluded:`, `File:`, and `Warning:`.
 
+Default editor detection is intentionally repo-backed: `visualstudiocode` is detected from `.vscode/` or `*.code-workspace`, and `jetbrains` is detected from `.idea/` or `*.iml`. Installed editors alone do not change default detection results.
+
 ## License
 
 No `LICENSE` file is currently present in this repository.

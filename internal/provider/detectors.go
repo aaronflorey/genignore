@@ -79,6 +79,13 @@ var ideInstallCandidatesByKey = map[string][]string{
 
 type DetectorFunc func(ctx context.Context, cwd string) Result
 
+type detectorInputs struct {
+	cwd        string
+	searchDirs []string
+}
+
+type detectorInputsContextKey struct{}
+
 func (f DetectorFunc) Detect(ctx context.Context, cwd string) Result {
 	return f(ctx, cwd)
 }
@@ -113,9 +120,9 @@ func Registry() map[string]Detector {
 		"macos":            osDetector("macos", "darwin"),
 		"linux":            osDetector("linux", "linux"),
 		"windows":          osDetector("windows", "windows"),
-		"visualstudiocode": pathDetector("visualstudiocode", []string{"code"}, "found VS Code binary in PATH"),
+		"visualstudiocode": vscodeProjectDetector(),
 		"phpstorm":         ideWithJetBrainsLanguageInferenceDetector("phpstorm", "composer.json"),
-		"jetbrains":        ideDetector("jetbrains"),
+		"jetbrains":        jetbrainsProjectDetector(),
 		"intellij":         ideDetector("intellij"),
 		"pycharm":          ideWithJetBrainsSignalDetector("pycharm", signalDetector{reason: "python project file", match: anyFileSignal("pyproject.toml", "requirements.txt", "setup.py")}),
 		"webstorm":         ideWithJetBrainsLanguageInferenceDetector("webstorm", "package.json"),
@@ -132,6 +139,10 @@ func ideDetector(key string) Detector {
 	return appDetector(key, ideInstallCandidatesForKey(key))
 }
 
+func jetbrainsInstallDetector() Detector {
+	return appDetector("jetbrains", ideInstallCandidatesForKey("jetbrains"))
+}
+
 func ideWithJetBrainsLanguageInferenceDetector(key, signalFile string) Detector {
 	return ideWithJetBrainsSignalDetector(key, signalDetector{reason: signalFile, match: fileSignal(signalFile)})
 }
@@ -144,12 +155,12 @@ func ideWithJetBrainsSignalDetector(key string, signal signalDetector) Detector 
 			return result
 		}
 
-		matchedSignal, ok := signal.match(cwd)
+		matchedSignal, ok := signal.match(ctx, cwd)
 		if !ok {
 			return result
 		}
 
-		jetbrains := ideDetector("jetbrains").Detect(ctx, cwd)
+		jetbrains := jetbrainsInstallDetector().Detect(ctx, cwd)
 		if !jetbrains.Matched {
 			return result
 		}
@@ -165,12 +176,12 @@ func ideWithJetBrainsSignalDetector(key string, signal signalDetector) Detector 
 
 type signalDetector struct {
 	reason string
-	match  func(cwd string) (string, bool)
+	match  func(ctx context.Context, cwd string) (string, bool)
 }
 
-func fileSignal(fileName string) func(cwd string) (string, bool) {
-	return func(cwd string) (string, bool) {
-		for _, dir := range oneLevelSearchDirs(cwd) {
+func fileSignal(fileName string) func(ctx context.Context, cwd string) (string, bool) {
+	return func(ctx context.Context, cwd string) (string, bool) {
+		for _, dir := range searchDirsFor(ctx, cwd) {
 			path := filepath.Join(dir, fileName)
 			if _, err := os.Stat(path); err == nil {
 				return fileName, true
@@ -180,10 +191,10 @@ func fileSignal(fileName string) func(cwd string) (string, bool) {
 	}
 }
 
-func anyFileSignal(fileNames ...string) func(cwd string) (string, bool) {
-	return func(cwd string) (string, bool) {
+func anyFileSignal(fileNames ...string) func(ctx context.Context, cwd string) (string, bool) {
+	return func(ctx context.Context, cwd string) (string, bool) {
 		for _, fileName := range fileNames {
-			if matched, ok := fileSignal(fileName)(cwd); ok {
+			if matched, ok := fileSignal(fileName)(ctx, cwd); ok {
 				return matched, true
 			}
 		}
@@ -191,9 +202,9 @@ func anyFileSignal(fileNames ...string) func(cwd string) (string, bool) {
 	}
 }
 
-func anyGlobSignal(reason string, patterns ...string) func(cwd string) (string, bool) {
-	return func(cwd string) (string, bool) {
-		for _, dir := range oneLevelSearchDirs(cwd) {
+func anyGlobSignal(reason string, patterns ...string) func(ctx context.Context, cwd string) (string, bool) {
+	return func(ctx context.Context, cwd string) (string, bool) {
+		for _, dir := range searchDirsFor(ctx, cwd) {
 			for _, pattern := range patterns {
 				matches, err := filepath.Glob(filepath.Join(dir, pattern))
 				if err != nil {
@@ -208,10 +219,10 @@ func anyGlobSignal(reason string, patterns ...string) func(cwd string) (string, 
 	}
 }
 
-func anySignalMatch(signals ...func(cwd string) (string, bool)) func(cwd string) (string, bool) {
-	return func(cwd string) (string, bool) {
+func anySignalMatch(signals ...func(ctx context.Context, cwd string) (string, bool)) func(ctx context.Context, cwd string) (string, bool) {
+	return func(ctx context.Context, cwd string) (string, bool) {
 		for _, signal := range signals {
-			if matched, ok := signal(cwd); ok {
+			if matched, ok := signal(ctx, cwd); ok {
 				return matched, true
 			}
 		}
@@ -220,8 +231,8 @@ func anySignalMatch(signals ...func(cwd string) (string, bool)) func(cwd string)
 }
 
 func anySignalDetector(key string, signal signalDetector) Detector {
-	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		if matched, ok := signal.match(cwd); ok {
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		if matched, ok := signal.match(ctx, cwd); ok {
 			reason := signal.reason
 			if matched != "" {
 				reason = matched
@@ -246,9 +257,49 @@ func ideInstallCandidatesForKey(key string) []string {
 	return copyOfCandidates
 }
 
+func vscodeProjectDetector() Detector {
+	return workspaceMetadataDetector("visualstudiocode", []string{".vscode"}, []string{"*.code-workspace"}, "found VS Code workspace metadata")
+}
+
+func jetbrainsProjectDetector() Detector {
+	return workspaceMetadataDetector("jetbrains", []string{".idea"}, []string{"*.iml"}, "found JetBrains project metadata")
+}
+
+func workspaceMetadataDetector(key string, dirNames []string, patterns []string, reason string) Detector {
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		for _, dir := range searchDirsFor(ctx, cwd) {
+			for _, name := range dirNames {
+				path := filepath.Join(dir, name)
+				info, err := os.Stat(path)
+				if err == nil {
+					if info.IsDir() {
+						return Result{Key: key, Matched: true, Reason: reason, Evidence: path}
+					}
+					continue
+				}
+				if os.IsPermission(err) {
+					return Result{Key: key, Matched: false, Reason: "permission denied", Evidence: path, Error: err.Error()}
+				}
+			}
+
+			for _, pattern := range patterns {
+				matches, err := filepath.Glob(filepath.Join(dir, pattern))
+				if err != nil {
+					continue
+				}
+				if len(matches) > 0 {
+					return Result{Key: key, Matched: true, Reason: reason, Evidence: matches[0]}
+				}
+			}
+		}
+
+		return Result{Key: key, Matched: false, Reason: "signal not found"}
+	})
+}
+
 func vueDetector() Detector {
-	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		for _, dir := range oneLevelSearchDirs(cwd) {
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		for _, dir := range searchDirsFor(ctx, cwd) {
 			for _, file := range []string{"vue.config.js", "vue.config.ts"} {
 				path := filepath.Join(dir, file)
 				if _, err := os.Stat(path); err == nil {
@@ -259,7 +310,7 @@ func vueDetector() Detector {
 			}
 		}
 
-		content, packagePath, result, ok := readSignalFile("vue", cwd, "package.json")
+		content, packagePath, result, ok := readSignalFile(ctx, "vue", cwd, "package.json")
 		if !ok {
 			return result
 		}
@@ -282,8 +333,8 @@ func vueDetector() Detector {
 }
 
 func fileExistsDetector(key, fileName, reason string) Detector {
-	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		for _, dir := range oneLevelSearchDirs(cwd) {
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		for _, dir := range searchDirsFor(ctx, cwd) {
 			path := filepath.Join(dir, fileName)
 			if _, err := os.Stat(path); err == nil {
 				return Result{Key: key, Matched: true, Reason: reason, Evidence: path}
@@ -296,8 +347,8 @@ func fileExistsDetector(key, fileName, reason string) Detector {
 }
 
 func anyFileDetector(key string, files []string, reason string) Detector {
-	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		for _, dir := range oneLevelSearchDirs(cwd) {
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		for _, dir := range searchDirsFor(ctx, cwd) {
 			for _, file := range files {
 				path := filepath.Join(dir, file)
 				if _, err := os.Stat(path); err == nil {
@@ -316,14 +367,14 @@ func nodeDetector() Detector {
 }
 
 func laravelDetector() Detector {
-	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		for _, dir := range oneLevelSearchDirs(cwd) {
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		for _, dir := range searchDirsFor(ctx, cwd) {
 			artisan := filepath.Join(dir, "artisan")
 			if _, err := os.Stat(artisan); err == nil {
 				return Result{Key: "laravel", Matched: true, Reason: "found artisan file", Evidence: artisan}
 			}
 		}
-		content, composer, result, ok := readSignalFile("laravel", cwd, "composer.json")
+		content, composer, result, ok := readSignalFile(ctx, "laravel", cwd, "composer.json")
 		if !ok {
 			return result
 		}
@@ -335,8 +386,8 @@ func laravelDetector() Detector {
 }
 
 func reactDetector() Detector {
-	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		content, packagePath, result, ok := readSignalFile("react", cwd, "package.json")
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		content, packagePath, result, ok := readSignalFile(ctx, "react", cwd, "package.json")
 		if !ok {
 			return result
 		}
@@ -359,8 +410,8 @@ func reactDetector() Detector {
 }
 
 func flutterDetector() Detector {
-	return DetectorFunc(func(_ context.Context, cwd string) Result {
-		content, pubspecPath, result, ok := readSignalFile("flutter", cwd, "pubspec.yaml")
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		content, pubspecPath, result, ok := readSignalFile(ctx, "flutter", cwd, "pubspec.yaml")
 		if !ok {
 			return result
 		}
@@ -406,8 +457,8 @@ func pathDetector(key string, binaries []string, reason string) Detector {
 	})
 }
 
-func readSignalFile(key, cwd, fileName string) ([]byte, string, Result, bool) {
-	for _, dir := range oneLevelSearchDirs(cwd) {
+func readSignalFile(ctx context.Context, key, cwd, fileName string) ([]byte, string, Result, bool) {
+	for _, dir := range searchDirsFor(ctx, cwd) {
 		path := filepath.Join(dir, fileName)
 		content, err := os.ReadFile(path)
 		if err == nil {
@@ -423,6 +474,19 @@ func readSignalFile(key, cwd, fileName string) ([]byte, string, Result, bool) {
 	}
 
 	return nil, "", Result{Key: key, Matched: false, Reason: "signal not found"}, false
+}
+
+func ContextWithInputs(ctx context.Context, cwd string) context.Context {
+	return context.WithValue(ctx, detectorInputsContextKey{}, detectorInputs{cwd: cwd, searchDirs: oneLevelSearchDirs(cwd)})
+}
+
+func searchDirsFor(ctx context.Context, cwd string) []string {
+	inputs, ok := ctx.Value(detectorInputsContextKey{}).(detectorInputs)
+	if ok && inputs.cwd == cwd {
+		return inputs.searchDirs
+	}
+
+	return oneLevelSearchDirs(cwd)
 }
 
 func oneLevelSearchDirs(cwd string) []string {
