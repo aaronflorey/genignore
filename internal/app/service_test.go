@@ -247,6 +247,54 @@ func TestAddMixedSupportedUnsupportedKeys(t *testing.T) {
 	}
 }
 
+func TestDetectReportsOfflineRuntimeWarningForRemoteProviders(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
+	svc := &Service{
+		CWD:     dir,
+		Config:  Config{Runtime: ConfigRuntime{Offline: true}},
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"node": matchedDetector("node"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.RuntimeWarnings, []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"}) {
+		t.Fatalf("unexpected runtime warnings: %v", res.RuntimeWarnings)
+	}
+}
+
+func TestDetectOmitsOfflineRuntimeWarningForEmbeddedOnlyProviders(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
+	svc := &Service{
+		CWD:     dir,
+		Config:  Config{Runtime: ConfigRuntime{Offline: true}},
+		Client:  client,
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"wrangler": matchedDetector("wrangler"),
+		},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if len(res.RuntimeWarnings) != 0 {
+		t.Fatalf("unexpected runtime warnings: %v", res.RuntimeWarnings)
+	}
+}
+
 func TestRemoteProviderDriftWarning(t *testing.T) {
 	t.Parallel()
 

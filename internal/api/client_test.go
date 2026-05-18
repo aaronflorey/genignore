@@ -7,16 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/aaronflorey/genignore/internal/providercatalog"
 )
 
 func TestClientUsesFixtures(t *testing.T) {
 	t.Parallel()
-	listFixture, err := os.ReadFile(filepath.Join("testdata", "list.json"))
-	if err != nil {
-		t.Fatalf("read list fixture failed: %v", err)
-	}
 	templateFixture, err := os.ReadFile(filepath.Join("testdata", "template.txt"))
 	if err != nil {
 		t.Fatalf("read template fixture failed: %v", err)
@@ -25,8 +24,7 @@ func TestClientUsesFixtures(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/catalog":
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write(listFixture)
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"},{"path":"Node.gitignore","type":"blob"},{"path":"Global/macOS.gitignore","type":"blob"}]}`))
 		case "/templates/Node.gitignore":
 			_, _ = w.Write(templateFixture)
 		case "/templates/Go.gitignore":
@@ -45,8 +43,10 @@ func TestClientUsesFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AvailableProviders failed: %v", err)
 	}
-	if !reflect.DeepEqual(list, []string{"go", "macos", "node"}) {
-		t.Fatalf("unexpected list: %v", list)
+	for _, key := range []string{"go", "macos", "node"} {
+		if !slices.Contains(list, key) {
+			t.Fatalf("expected canonical provider list to contain %q: %v", key, list)
+		}
 	}
 	listAgain, err := client.AvailableProviders(context.Background())
 	if err != nil {
@@ -65,20 +65,16 @@ func TestClientUsesFixtures(t *testing.T) {
 	}
 }
 
-func TestAvailableProvidersReturnsStableErrorOnNonOKResponse(t *testing.T) {
+func TestAvailableProvidersUsesCanonicalProviderCatalog(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadGateway)
-	}))
-	defer server.Close()
-
 	client := NewClient()
-	client.listURL = server.URL
-
-	_, err := client.AvailableProviders(context.Background())
-	if err == nil || err.Error() != "list API returned status 502" {
-		t.Fatalf("unexpected error: %v", err)
+	got, err := client.AvailableProviders(context.Background())
+	if err != nil {
+		t.Fatalf("AvailableProviders failed: %v", err)
+	}
+	if !reflect.DeepEqual(got, providercatalog.RemoteSupportedKeys()) {
+		t.Fatalf("unexpected canonical provider list")
 	}
 }
 
@@ -107,37 +103,50 @@ func TestFetchTemplateReturnsStableErrorOnNonOKResponse(t *testing.T) {
 	}
 }
 
-func TestAvailableProvidersRejectsMissingTreeResponse(t *testing.T) {
+func TestFetchTemplateOfflineUsesCachedRemoteTemplate(t *testing.T) {
 	t.Parallel()
 
+	cacheDir := t.TempDir()
+	live := NewClientWithOptions(Options{})
+	live.cacheDir = cacheDir
+	offline := NewClientWithOptions(Options{Offline: true})
+	offline.cacheDir = cacheDir
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"entries":[]}`))
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`))
+		case "/templates/Node.gitignore":
+			_, _ = w.Write([]byte("node_modules/\n"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
 	}))
 	defer server.Close()
+	live.listURL = server.URL + "/catalog"
+	live.templateURL = server.URL + "/templates/"
 
-	client := NewClient()
-	client.listURL = server.URL
+	if _, err := live.FetchTemplate(context.Background(), []string{"node"}); err != nil {
+		t.Fatalf("live fetch failed: %v", err)
+	}
 
-	_, err := client.AvailableProviders(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "decode list API response") {
-		t.Fatalf("unexpected error: %v", err)
+	resp, err := offline.FetchTemplate(context.Background(), []string{"node"})
+	if err != nil {
+		t.Fatalf("offline fetch failed: %v", err)
+	}
+	if resp.Content != "node_modules/" {
+		t.Fatalf("unexpected cached template content: %q", resp.Content)
 	}
 }
 
-func TestAvailableProvidersRejectsInvalidResponse(t *testing.T) {
+func TestFetchTemplateOfflineRequiresCachedRemoteTemplate(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`[]`))
-	}))
-	defer server.Close()
+	client := NewClientWithOptions(Options{Offline: true})
+	client.cacheDir = t.TempDir()
 
-	client := NewClient()
-	client.listURL = server.URL
-
-	_, err := client.AvailableProviders(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "decode list API response") {
+	_, err := client.FetchTemplate(context.Background(), []string{"node"})
+	if err == nil || err.Error() != "offline mode requires cached template for provider: node" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

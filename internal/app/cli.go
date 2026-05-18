@@ -201,6 +201,9 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 		for _, warning := range result.UnsupportedKeyWarnings {
 			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
 		}
+		for _, warning := range result.RuntimeWarnings {
+			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		}
 		for _, warning := range result.RemoteProviderWarnings {
 			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
 		}
@@ -223,6 +226,9 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 	}
 	fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(result.FinalProviders))
 	for _, warning := range result.UnsupportedKeyWarnings {
+		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+	}
+	for _, warning := range result.RuntimeWarnings {
 		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
 	}
 	for _, warning := range result.RemoteProviderWarnings {

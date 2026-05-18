@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/aaronflorey/genignore/internal/api"
+	"github.com/aaronflorey/genignore/internal/customtemplate"
 	"github.com/aaronflorey/genignore/internal/gitignore"
 	"github.com/aaronflorey/genignore/internal/provider"
 )
@@ -47,7 +48,7 @@ func NewService(cwd string, cfg Config) *Service {
 	return &Service{
 		CWD:       cwd,
 		Config:    cfg,
-		Client:    api.NewClient(),
+		Client:    api.NewClientWithOptions(api.Options{Offline: cfg.Runtime.Offline}),
 		Manager:   gitignore.NewManager(cwd),
 		Detectors: provider.Registry(),
 	}
@@ -76,6 +77,7 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 		ExcludedProviders:      exclude,
 		FinalProviders:         targetResult.FinalProviders,
 		UnsupportedKeyWarnings: warnings,
+		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, targetResult.FinalProviders),
 		RemoteProviderWarnings: targetResult.RemoteProviderWarnings,
 		DetectionResults:       targetResult.DetectionResults,
 		FileAction:             targetResult.FileAction,
@@ -227,6 +229,7 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 		AddedProviders:         added,
 		FinalProviders:         finalProviders,
 		UnsupportedKeyWarnings: warnings,
+		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, finalProviders),
 		RemoteProviderWarnings: remoteWarningsFromTemplate(template),
 		FileAction:             action,
 		TemplateProviderCount:  len(template.Providers),
@@ -276,6 +279,22 @@ func remoteDiffWarnings(remote map[string]struct{}) []string {
 	}
 	slices.Sort(warnings)
 	return warnings
+}
+
+func runtimeWarnings(offline bool, providers []string) []string {
+	if !offline || !hasRemoteProviders(providers) {
+		return nil
+	}
+	return []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"}
+}
+
+func hasRemoteProviders(providers []string) bool {
+	for _, key := range providers {
+		if !customtemplate.HasProvider(key) {
+			return true
+		}
+	}
+	return false
 }
 
 func makeSet(keys []string) map[string]struct{} {

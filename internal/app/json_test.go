@@ -21,6 +21,7 @@ func TestJSONDetectCommandContract(t *testing.T) {
 			ExcludedProviders:      []string{"python"},
 			FinalProviders:         []string{"go", "node", "react"},
 			UnsupportedKeyWarnings: []string{"unsupported provider key: bad"},
+			RuntimeWarnings:        []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"},
 			RemoteProviderWarnings: []string{"supported provider missing remotely: android"},
 			DetectionResults: []provider.Result{
 				{Key: "go", Matched: true, Reason: "found go.mod", Evidence: "/tmp/project/go.mod"},
@@ -62,6 +63,9 @@ func TestJSONDetectCommandContract(t *testing.T) {
 	if !slices.Equal(payload.UnsupportedKeyWarnings, []string{"unsupported provider key: bad"}) {
 		t.Fatalf("unexpected unsupported warnings: %v", payload.UnsupportedKeyWarnings)
 	}
+	if !slices.Equal(payload.RuntimeWarnings, []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"}) {
+		t.Fatalf("unexpected runtime warnings: %v", payload.RuntimeWarnings)
+	}
 	if !slices.Equal(payload.RemoteProviderWarnings, []string{"supported provider missing remotely: android"}) {
 		t.Fatalf("unexpected remote warnings: %v", payload.RemoteProviderWarnings)
 	}
@@ -88,6 +92,7 @@ func TestJSONAddCommandContractOmitsDetectOnlyFields(t *testing.T) {
 			AddedProviders:         []string{"go"},
 			FinalProviders:         []string{"go", "node"},
 			UnsupportedKeyWarnings: []string{"unsupported provider key: bad", "unsupported provider key: unknown"},
+			RuntimeWarnings:        []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"},
 			RemoteProviderWarnings: []string{"supported provider missing remotely: android", "supported provider missing remotely: angular"},
 			FileAction:             gitignore.FileActionUpdated,
 			TemplateProviderCount:  2,
@@ -128,6 +133,9 @@ func TestJSONAddCommandContractOmitsDetectOnlyFields(t *testing.T) {
 	}
 	if !slices.Equal(result.UnsupportedKeyWarnings, []string{"unsupported provider key: bad", "unsupported provider key: unknown"}) {
 		t.Fatalf("unexpected unsupported warnings: %v", result.UnsupportedKeyWarnings)
+	}
+	if !slices.Equal(result.RuntimeWarnings, []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"}) {
+		t.Fatalf("unexpected runtime warnings: %v", result.RuntimeWarnings)
 	}
 	if !slices.Equal(result.RemoteProviderWarnings, []string{"supported provider missing remotely: android", "supported provider missing remotely: angular"}) {
 		t.Fatalf("unexpected remote warnings: %v", result.RemoteProviderWarnings)

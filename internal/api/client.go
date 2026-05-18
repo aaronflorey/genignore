@@ -6,13 +6,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/aaronflorey/genignore/internal/customtemplate"
+	"github.com/aaronflorey/genignore/internal/providercatalog"
 )
 
 const (
@@ -26,35 +30,40 @@ type TemplateResponse struct {
 	AvailableProviders []string `json:"-"`
 }
 
+type Options struct {
+	Offline bool
+}
+
 type Client struct {
 	httpClient  *http.Client
 	listURL     string
 	templateURL string
+	offline     bool
+	cacheDir    string
 
 	catalogMu sync.Mutex
 	catalog   map[string]string
 }
 
 func NewClient() *Client {
+	return NewClientWithOptions(Options{})
+}
+
+var userCacheDir = os.UserCacheDir
+
+func NewClientWithOptions(opts Options) *Client {
+	cacheDir, _ := defaultCacheDir()
 	return &Client{
 		httpClient:  &http.Client{Timeout: 15 * time.Second},
 		listURL:     defaultListURL,
 		templateURL: defaultTemplateURL,
+		offline:     opts.Offline,
+		cacheDir:    cacheDir,
 	}
 }
 
 func (c *Client) AvailableProviders(ctx context.Context) ([]string, error) {
-	catalog, err := c.fetchProviderCatalog(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	providers := make([]string, 0, len(catalog))
-	for key := range catalog {
-		providers = append(providers, key)
-	}
-	slices.Sort(providers)
-	return providers, nil
+	return providercatalog.RemoteSupportedKeys(), nil
 }
 
 func (c *Client) FetchTemplate(ctx context.Context, providers []string) (TemplateResponse, error) {
@@ -74,22 +83,35 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 
 	parts := make([]string, 0, 2)
 	if len(remoteProviders) > 0 {
-		catalog, err := c.fetchProviderCatalog(ctx)
-		if err != nil {
-			return TemplateResponse{}, err
-		}
-		availableProviders = sortedCatalogProviders(catalog)
-		for _, key := range remoteProviders {
-			templatePath, ok := catalog[key]
-			if !ok {
-				return TemplateResponse{}, fmt.Errorf("template catalog missing provider: %s", key)
+		if c.offline {
+			availableProviders = providercatalog.RemoteSupportedKeys()
+			for _, key := range remoteProviders {
+				content, err := c.readCachedTemplate(key)
+				if err != nil {
+					return TemplateResponse{}, err
+				}
+				if content != "" {
+					parts = append(parts, content)
+				}
 			}
-			content, err := c.fetchTemplatePart(ctx, key, templatePath)
+		} else {
+			catalog, err := c.fetchProviderCatalog(ctx)
 			if err != nil {
 				return TemplateResponse{}, err
 			}
-			if content != "" {
-				parts = append(parts, content)
+			availableProviders = sortedCatalogProviders(catalog)
+			for _, key := range remoteProviders {
+				templatePath, ok := catalog[key]
+				if !ok {
+					return TemplateResponse{}, fmt.Errorf("template catalog missing provider: %s", key)
+				}
+				content, err := c.fetchTemplatePart(ctx, key, templatePath)
+				if err != nil {
+					return TemplateResponse{}, err
+				}
+				if content != "" {
+					parts = append(parts, content)
+				}
 			}
 		}
 	}
@@ -163,7 +185,47 @@ func (c *Client) fetchTemplatePart(ctx context.Context, key string, templatePath
 	if err != nil {
 		return "", fmt.Errorf("read template API response: %w", err)
 	}
-	return strings.Trim(string(body), "\n"), nil
+	content := strings.Trim(string(body), "\n")
+	if err := c.writeCachedTemplate(key, content); err != nil {
+		return "", err
+	}
+	return content, nil
+}
+
+func defaultCacheDir() (string, error) {
+	cacheHome, err := userCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve cache home: %w", err)
+	}
+	return filepath.Join(cacheHome, "genignore", "github-gitignore"), nil
+}
+
+func (c *Client) readCachedTemplate(key string) (string, error) {
+	content, err := os.ReadFile(c.templateCachePath(key))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("offline mode requires cached template for provider: %s", key)
+		}
+		return "", fmt.Errorf("read cached template for provider %s: %w", key, err)
+	}
+	return strings.Trim(string(content), "\n"), nil
+}
+
+func (c *Client) writeCachedTemplate(key string, content string) error {
+	if c.cacheDir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Join(c.cacheDir, "templates"), 0o755); err != nil {
+		return fmt.Errorf("create template cache directory: %w", err)
+	}
+	if err := os.WriteFile(c.templateCachePath(key), []byte(content), 0o644); err != nil {
+		return fmt.Errorf("write cached template for provider %s: %w", key, err)
+	}
+	return nil
+}
+
+func (c *Client) templateCachePath(key string) string {
+	return filepath.Join(c.cacheDir, "templates", url.PathEscape(key)+".gitignore")
 }
 
 func decodeProviderCatalog(body []byte) (map[string]string, error) {

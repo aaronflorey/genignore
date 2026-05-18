@@ -15,6 +15,7 @@ type CommandResult struct {
 	AddedProviders         []string             `json:"addedProviders,omitempty"`
 	FinalProviders         []string             `json:"finalProviders"`
 	UnsupportedKeyWarnings []string             `json:"unsupportedKeyWarnings,omitempty"`
+	RuntimeWarnings        []string             `json:"runtimeWarnings,omitempty"`
 	RemoteProviderWarnings []string             `json:"remoteProviderWarnings,omitempty"`
 	DetectionResults       []provider.Result    `json:"detectionResults,omitempty"`
 	FileAction             gitignore.FileAction `json:"fileAction"`
