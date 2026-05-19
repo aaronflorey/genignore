@@ -48,8 +48,26 @@ jobs:
           version: v2.15.2
           args: check
 
-      - name: Build release snapshot
+      - name: Build release snapshot archives
         uses: goreleaser/goreleaser-action@v6
         with:
           version: v2.15.2
-          args: build --snapshot --clean
+          args: release --snapshot --clean --skip=publish
+
+      - name: Smoke test packaged Linux artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          archive=$(ls dist/genignore_*_linux_amd64.tar.gz)
+          smoke_dir=$(mktemp -d)
+          tar -xzf "$archive" -C "$smoke_dir"
+
+          test -x "$smoke_dir/genignore"
+          test -f "$smoke_dir/README.md"
+
+          "$smoke_dir/genignore" list >"$smoke_dir/list.txt"
+          "$smoke_dir/genignore" help >"$smoke_dir/help.txt"
+
+          test -s "$smoke_dir/list.txt"
+          test -s "$smoke_dir/help.txt"

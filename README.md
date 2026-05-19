@@ -113,6 +113,20 @@ go test -run '^$' -fuzz=FuzzParseManagedProvidersRoundTrip -fuzztime=10s ./inter
 go test -run '^$' -fuzz=FuzzMergeManagedBlock -fuzztime=10s ./internal/gitignore
 ```
 
+## Release maintenance
+
+CI validates release packaging with GoReleaser `v2.15.2` by building snapshot archives and unpacking the Linux amd64 tarball before running the packaged `genignore` binary.
+
+When refreshing the toolchain or release dependencies, keep that work isolated from feature changes and verify it deliberately:
+
+1. Update one pinned tool or dependency at a time, such as `go.mod`, `go.sum`, `.github/workflows/*.yml`, or `.goreleaser.yaml`.
+2. Run `go test ./...`.
+3. Run `goreleaser check`.
+4. Run `goreleaser release --snapshot --clean --skip=publish`.
+5. Unpack `dist/genignore_*_linux_amd64.tar.gz` and run `./genignore list` or `./genignore help` from the extracted artifact.
+
+Treat upstream catalog snapshot refreshes and Go or GoReleaser version bumps as narrow maintenance changes so any release regression stays reviewable.
+
 ## License
 
 No `LICENSE` file is currently present in this repository.
