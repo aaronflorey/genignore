@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -1238,6 +1240,122 @@ func TestAddRemainsSingleTargetWhenPackagesDirectoryExists(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "packages", "api", ".gitignore")); !os.IsNotExist(err) {
 		t.Fatalf("expected add to avoid writing package .gitignore")
 	}
+}
+
+func TestDetectDiffContractNextVSCodeFixture(t *testing.T) {
+	t.Parallel()
+
+	dir := copyRepoFixture(t, "next-vscode-app")
+	client := &fakeAPI{
+		available: provider.SupportedKeys,
+		template:  ".idea/\n.next/\nnode_modules/\n.vscode/\n",
+	}
+	svc := &Service{
+		CWD:       dir,
+		Client:    client,
+		Manager:   gitignore.NewManager(dir),
+		Detectors: fixtureDetectors("jetbrains", "nextjs", "node", "react", "visualstudiocode"),
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{Diff: true})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("expected diff preview to avoid writing .gitignore")
+	}
+
+	assertJSONContract(t, "detect_diff_next_vscode_app.json", normalizeCommandResultContract(res, dir))
+}
+
+func TestDoctorContractLaravelJetBrainsFixture(t *testing.T) {
+	t.Parallel()
+
+	dir := copyRepoFixture(t, "laravel-jetbrains-app")
+	client := &fakeAPI{
+		available: provider.SupportedKeys,
+		runtime: api.RuntimeDiagnostics{
+			UpstreamCommit:  api.DefaultUpstreamCommit,
+			Offline:         false,
+			RemoteProviders: []string{"composer", "jetbrains", "laravel"},
+			Decisions: []string{
+				"supported providers are validated against the checked-in GitHub catalog snapshot plus embedded exceptions",
+			},
+		},
+	}
+	svc := &Service{
+		CWD:       dir,
+		Client:    client,
+		Manager:   gitignore.NewManager(dir),
+		Detectors: fixtureDetectors("composer", "jetbrains", "laravel"),
+	}
+
+	res, err := svc.Doctor(context.Background(), DoctorOptions{})
+	if err != nil {
+		t.Fatalf("doctor failed: %v", err)
+	}
+
+	assertJSONContract(t, "doctor_laravel_jetbrains_app.json", normalizeDoctorResultContract(res, dir))
+}
+
+func fixtureDetectors(keys ...string) map[string]provider.Detector {
+	registry := provider.Registry()
+	detectors := make(map[string]provider.Detector, len(keys))
+	for _, key := range keys {
+		detector, ok := registry[key]
+		if !ok {
+			panic("missing detector: " + key)
+		}
+		detectors[key] = detector
+	}
+	return detectors
+}
+
+func assertJSONContract(t *testing.T, contractName string, value any) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(value); err != nil {
+		t.Fatalf("marshal contract json: %v", err)
+	}
+	got := buf.String()
+	want, err := os.ReadFile(filepath.Join(repoRoot(t), "testdata", "contracts", contractName))
+	if err != nil {
+		t.Fatalf("read contract %s: %v", contractName, err)
+	}
+	if got != string(want) {
+		t.Fatalf("contract mismatch for %s\nwant:\n%s\n got:\n%s", contractName, string(want), got)
+	}
+}
+
+func normalizeCommandResultContract(result CommandResult, root string) CommandResult {
+	result.CWD = "<fixture>"
+	for i := range result.DetectionResults {
+		result.DetectionResults[i].Evidence = normalizeEvidencePath(root, result.DetectionResults[i].Evidence)
+	}
+	return result
+}
+
+func normalizeDoctorResultContract(result DoctorResult, root string) DoctorResult {
+	result.CWD = "<fixture>"
+	for i := range result.Detections {
+		result.Detections[i].Evidence = normalizeEvidencePath(root, result.Detections[i].Evidence)
+	}
+	return result
+}
+
+func normalizeEvidencePath(root string, evidence string) string {
+	if evidence == "" {
+		return ""
+	}
+	rel, err := filepath.Rel(root, evidence)
+	if err != nil {
+		return filepath.ToSlash(evidence)
+	}
+	return filepath.ToSlash(rel)
 }
 
 func containsString(values []string, want string) bool {

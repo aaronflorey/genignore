@@ -1,0 +1,52 @@
+{
+  "command": "doctor",
+  "cwd": "<fixture>",
+  "detectedProviders": [
+    "composer",
+    "jetbrains",
+    "laravel"
+  ],
+  "finalProviders": [
+    "composer",
+    "jetbrains",
+    "laravel"
+  ],
+  "detections": [
+    {
+      "key": "composer",
+      "matched": true,
+      "origin": "repository",
+      "reason": "found composer.json",
+      "evidence": "composer.json"
+    },
+    {
+      "key": "jetbrains",
+      "matched": true,
+      "origin": "repository",
+      "reason": "found JetBrains project metadata",
+      "evidence": ".idea"
+    },
+    {
+      "key": "laravel",
+      "matched": true,
+      "origin": "repository",
+      "reason": "found artisan file",
+      "evidence": "artisan"
+    }
+  ],
+  "runtime": {
+    "upstreamCommit": "3780fff86c705155792fb3e1787cebd6281ba8cf",
+    "offline": false,
+    "remoteProviders": [
+      "composer",
+      "jetbrains",
+      "laravel"
+    ],
+    "decisions": [
+      "supported providers are validated against the checked-in GitHub catalog snapshot plus embedded exceptions"
+    ]
+  },
+  "provenance": [
+    "# Provenance: github/gitignore@3780fff86c705155792fb3e1787cebd6281ba8cf [composer,jetbrains,laravel]"
+  ]
+}

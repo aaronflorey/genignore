@@ -817,3 +817,59 @@ func TestRegistryIncludesRequestedLanguageDetectors(t *testing.T) {
 		}
 	}
 }
+
+func TestRegistryMatchesCuratedRepositoryFixtures(t *testing.T) {
+	t.Parallel()
+
+	registry := Registry()
+	tests := []struct {
+		name    string
+		fixture string
+		keys    []string
+		want    []string
+	}{
+		{
+			name:    "next-vscode-app",
+			fixture: "next-vscode-app",
+			keys:    []string{"jetbrains", "nextjs", "node", "react", "visualstudiocode"},
+			want:    []string{"jetbrains", "nextjs", "node", "react", "visualstudiocode"},
+		},
+		{
+			name:    "laravel-jetbrains-app",
+			fixture: "laravel-jetbrains-app",
+			keys:    []string{"composer", "jetbrains", "laravel"},
+			want:    []string{"composer", "jetbrains", "laravel"},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			root := fixtureRepoPath(t, tt.fixture)
+			ctx := ContextWithInputs(context.Background(), root)
+
+			matched := make([]string, 0, len(tt.keys))
+			for _, key := range tt.keys {
+				result := registry[key].Detect(ctx, root)
+				if result.Matched {
+					matched = append(matched, key)
+				}
+			}
+
+			if !slices.Equal(matched, tt.want) {
+				t.Fatalf("unexpected matched detectors for %s: got %v want %v", tt.fixture, matched, tt.want)
+			}
+		})
+	}
+}
+
+func fixtureRepoPath(t *testing.T, name string) string {
+	t.Helper()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+
+	return filepath.Join(filepath.Clean(filepath.Join(wd, "..", "..")), "testdata", "repos", name)
+}

@@ -119,6 +119,14 @@ Default editor detection is intentionally repo-backed: `visualstudiocode` is det
 
 ## Development
 
+Curated real-repository fixtures live under `testdata/repos/`, and checked-in output contracts live under `testdata/contracts/`. Keep both small, secret-free, and easy to review.
+
+When updating fixture-backed contracts intentionally:
+
+1. Reduce the fixture to only the files that affect detector or managed-output behavior.
+2. Review the resulting `testdata/contracts/*` diff for provider ordering, provenance, and formatting churn.
+3. Run `go test ./internal/provider ./internal/gitignore ./internal/app` before accepting the contract update.
+
 Run the managed-block regression tests:
 
 ```bash

@@ -96,7 +96,8 @@ Keep Go, GoReleaser, and other pinned release-tool updates isolated from feature
 <!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
+- Keep fixture repositories under `testdata/repos/` reduced to detector-relevant files only; strip secrets, history, vendored code, and unrelated source.
+- Keep machine-readable stability contracts under `testdata/contracts/` and update them only with intentional, reviewed output changes.
 <!-- GSD:conventions-end -->
 
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->

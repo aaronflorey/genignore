@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/aaronflorey/genignore/internal/api"
 )
 
 const noisyToptalTemplate = `# Created by https://www.toptal.com/developers/gitignore/api/go,macos
@@ -785,6 +787,28 @@ func TestUpsertDropsStaleManagedEnvExceptionsButPreservesUserOwnedOnes(t *testin
 	}
 	if !strings.HasSuffix(value, "# local rule\n!.env.local\n") {
 		t.Fatalf("expected user-owned env exception preserved outside managed block\n%s", value)
+	}
+}
+
+func TestBuildManagedBlockMatchesContractFixture(t *testing.T) {
+	t.Parallel()
+
+	block := BuildManagedBlockWithMetadata(
+		[]string{"jetbrains", "nextjs", "node", "visualstudiocode"},
+		[]string{"# Provenance: github/gitignore@" + api.DefaultUpstreamCommit + " [jetbrains,nextjs,node,visualstudiocode]"},
+		".idea/\n.next/\nnode_modules/\n.vscode/\n",
+	)
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	want, err := os.ReadFile(filepath.Join(filepath.Clean(filepath.Join(wd, "..", "..")), "testdata", "contracts", "managed_block_next_vscode_app.gitignore"))
+	if err != nil {
+		t.Fatalf("read contract fixture: %v", err)
+	}
+	if block != string(want) {
+		t.Fatalf("managed block contract mismatch\nwant:\n%s\n got:\n%s", string(want), block)
 	}
 }
 
