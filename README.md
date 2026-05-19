@@ -41,6 +41,7 @@ genignore add go node
 ```toml
 [runtime]
 offline = true
+upstream_commit = "3780fff86c705155792fb3e1787cebd6281ba8cf"
 ```
 
 If you are working from source:
@@ -82,11 +83,16 @@ Enable explicit offline template reuse from the machine-level config file:
 ```toml
 [runtime]
 offline = true
+upstream_commit = "3780fff86c705155792fb3e1787cebd6281ba8cf"
 ```
 
-`runtime.offline = true` keeps provider validation on the checked-in GitHub catalog snapshot and loads remote template content from the local cache created by prior online runs. If a required cached remote template is missing, `genignore` fails clearly instead of silently widening support or falling back to a live refresh.
+`runtime.upstream_commit` pins remote catalog lookups and remote template fetches to a specific `github/gitignore` commit so equivalent inputs can regenerate against the same upstream revision later. If omitted, `genignore` uses the checked-in default pin `3780fff86c705155792fb3e1787cebd6281ba8cf`.
+
+`runtime.offline = true` keeps provider validation on the checked-in GitHub catalog snapshot and loads remote template content from the local cache created by prior online runs. Offline cache reuse now requires matching metadata for the pinned upstream commit, a valid integrity checksum, and a fresh fetch timestamp. If a required cached remote template is missing, stale, or corrupt, `genignore` fails clearly instead of silently widening support or falling back to a live refresh.
 
 The canonical supported-provider contract is the checked-in GitHub catalog snapshot shipped with `genignore`, plus the embedded `ai-agents` and `wrangler` exceptions. Live GitHub fetches are still used to download remote template bodies during normal online runs, and any upstream drift is surfaced as warnings instead of changing the local support contract implicitly.
+
+Online runs store cache metadata alongside remote catalog and template bodies, including the pinned upstream commit, `ETag`, fetch time, and checksum. When cached metadata is still valid, `genignore` sends `If-None-Match` and reuses cached content on `304 Not Modified` instead of downloading the same payload again.
 
 Output labels in human-readable mode include `Command:`, `Target:`, `Detected:`, `Final:`, `Added:`, `Included:`, `Excluded:`, `File:`, and `Warning:`.
 

@@ -25,7 +25,8 @@ type ConfigDefaults struct {
 }
 
 type ConfigRuntime struct {
-	Offline bool `mapstructure:"offline" toml:"offline"`
+	Offline        bool   `mapstructure:"offline" toml:"offline"`
+	UpstreamCommit string `mapstructure:"upstream_commit" toml:"upstream_commit"`
 }
 
 func LoadConfig() (Config, error) {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,8 +21,11 @@ import (
 )
 
 const (
-	defaultListURL     = "https://api.github.com/repos/github/gitignore/git/trees/main?recursive=1"
-	defaultTemplateURL = "https://raw.githubusercontent.com/github/gitignore/main/"
+	DefaultUpstreamCommit  = "3780fff86c705155792fb3e1787cebd6281ba8cf"
+	defaultListURLTemplate = "https://api.github.com/repos/github/gitignore/git/trees/%s?recursive=1"
+	defaultTemplateURLTmpl = "https://raw.githubusercontent.com/github/gitignore/%s/"
+	cacheMetadataVersion   = 1
+	cacheFreshnessWindow   = 7 * 24 * time.Hour
 )
 
 type TemplateResponse struct {
@@ -31,15 +35,17 @@ type TemplateResponse struct {
 }
 
 type Options struct {
-	Offline bool
+	Offline        bool
+	UpstreamCommit string
 }
 
 type Client struct {
-	httpClient  *http.Client
-	listURL     string
-	templateURL string
-	offline     bool
-	cacheDir    string
+	httpClient     *http.Client
+	listURL        string
+	templateURL    string
+	offline        bool
+	cacheDir       string
+	upstreamCommit string
 
 	catalogMu sync.Mutex
 	catalog   map[string]string
@@ -53,13 +59,32 @@ var userCacheDir = os.UserCacheDir
 
 func NewClientWithOptions(opts Options) *Client {
 	cacheDir, _ := defaultCacheDir()
-	return &Client{
-		httpClient:  &http.Client{Timeout: 15 * time.Second},
-		listURL:     defaultListURL,
-		templateURL: defaultTemplateURL,
-		offline:     opts.Offline,
-		cacheDir:    cacheDir,
+	upstreamCommit := strings.TrimSpace(opts.UpstreamCommit)
+	if upstreamCommit == "" {
+		upstreamCommit = DefaultUpstreamCommit
 	}
+	return &Client{
+		httpClient:     &http.Client{Timeout: 15 * time.Second},
+		listURL:        fmt.Sprintf(defaultListURLTemplate, upstreamCommit),
+		templateURL:    fmt.Sprintf(defaultTemplateURLTmpl, upstreamCommit),
+		offline:        opts.Offline,
+		cacheDir:       cacheDir,
+		upstreamCommit: upstreamCommit,
+	}
+}
+
+type cacheMetadata struct {
+	Version        int       `json:"version"`
+	UpstreamCommit string    `json:"upstream_commit"`
+	ETag           string    `json:"etag,omitempty"`
+	FetchedAt      time.Time `json:"fetched_at"`
+	SHA256         string    `json:"sha256"`
+}
+
+type cacheEntry struct {
+	Body     []byte
+	Metadata cacheMetadata
+	Stale    bool
 }
 
 func (c *Client) AvailableProviders(ctx context.Context) ([]string, error) {
@@ -136,9 +161,14 @@ func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, e
 	}
 	c.catalogMu.Unlock()
 
+	cachedCatalog, cacheErr := c.readCachedCatalog(false)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.listURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build list request: %w", err)
+	}
+	if cacheErr == nil && cachedCatalog.Metadata.ETag != "" {
+		req.Header.Set("If-None-Match", cachedCatalog.Metadata.ETag)
 	}
 	res, err := c.httpClient.Do(req)
 	if err != nil {
@@ -147,6 +177,23 @@ func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, e
 	defer func() {
 		_ = res.Body.Close()
 	}()
+	if res.StatusCode == http.StatusNotModified {
+		if cacheErr != nil {
+			return nil, fmt.Errorf("list API returned status 304 without a valid cached provider catalog")
+		}
+		catalog, err := decodeProviderCatalog(cachedCatalog.Body)
+		if err != nil {
+			return nil, fmt.Errorf("decode cached provider catalog: %w", err)
+		}
+		if err := c.refreshCachedCatalog(cachedCatalog, res.Header.Get("ETag")); err != nil {
+			return nil, err
+		}
+
+		c.catalogMu.Lock()
+		c.catalog = cloneCatalog(catalog)
+		c.catalogMu.Unlock()
+		return catalog, nil
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, fmt.Errorf("list API returned status %d", res.StatusCode)
 	}
@@ -158,6 +205,9 @@ func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, e
 	if err != nil {
 		return nil, fmt.Errorf("decode list API response: %w", err)
 	}
+	if err := c.writeCachedCatalog(body, res.Header.Get("ETag")); err != nil {
+		return nil, err
+	}
 
 	c.catalogMu.Lock()
 	c.catalog = cloneCatalog(catalog)
@@ -167,9 +217,13 @@ func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, e
 }
 
 func (c *Client) fetchTemplatePart(ctx context.Context, key string, templatePath string) (string, error) {
+	cachedTemplate, cacheErr := c.readCachedTemplateEntry(key, false)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.templateURL+templatePath, nil)
 	if err != nil {
 		return "", fmt.Errorf("build template request: %w", err)
+	}
+	if cacheErr == nil && cachedTemplate.Metadata.ETag != "" {
+		req.Header.Set("If-None-Match", cachedTemplate.Metadata.ETag)
 	}
 	res, err := c.httpClient.Do(req)
 	if err != nil {
@@ -178,6 +232,15 @@ func (c *Client) fetchTemplatePart(ctx context.Context, key string, templatePath
 	defer func() {
 		_ = res.Body.Close()
 	}()
+	if res.StatusCode == http.StatusNotModified {
+		if cacheErr != nil {
+			return "", fmt.Errorf("template API returned status 304 without a valid cached template for provider %s", key)
+		}
+		if err := c.refreshCachedTemplate(key, cachedTemplate, res.Header.Get("ETag")); err != nil {
+			return "", err
+		}
+		return strings.Trim(string(cachedTemplate.Body), "\n"), nil
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return "", fmt.Errorf("template API returned status %d", res.StatusCode)
 	}
@@ -186,7 +249,7 @@ func (c *Client) fetchTemplatePart(ctx context.Context, key string, templatePath
 		return "", fmt.Errorf("read template API response: %w", err)
 	}
 	content := strings.Trim(string(body), "\n")
-	if err := c.writeCachedTemplate(key, content); err != nil {
+	if err := c.writeCachedTemplate(key, content, res.Header.Get("ETag")); err != nil {
 		return "", err
 	}
 	return content, nil
@@ -201,31 +264,152 @@ func defaultCacheDir() (string, error) {
 }
 
 func (c *Client) readCachedTemplate(key string) (string, error) {
-	content, err := os.ReadFile(c.templateCachePath(key))
+	entry, err := c.readCachedTemplateEntry(key, true)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", fmt.Errorf("offline mode requires cached template for provider: %s", key)
 		}
-		return "", fmt.Errorf("read cached template for provider %s: %w", key, err)
+		return "", err
 	}
-	return strings.Trim(string(content), "\n"), nil
+	return strings.Trim(string(entry.Body), "\n"), nil
 }
 
-func (c *Client) writeCachedTemplate(key string, content string) error {
+func (c *Client) writeCachedTemplate(key string, content string, etag string) error {
+	return c.writeCacheEntry(c.templateCachePath(key), c.templateMetadataPath(key), []byte(content), etag, fmt.Sprintf("template for provider %s", key))
+}
+
+func (c *Client) writeCachedCatalog(body []byte, etag string) error {
+	return c.writeCacheEntry(c.catalogCachePath(), c.catalogMetadataPath(), body, etag, "provider catalog")
+}
+
+func (c *Client) refreshCachedTemplate(key string, entry cacheEntry, etag string) error {
+	return c.refreshCacheEntry(c.templateMetadataPath(key), entry, etag, fmt.Sprintf("template for provider %s", key))
+}
+
+func (c *Client) refreshCachedCatalog(entry cacheEntry, etag string) error {
+	return c.refreshCacheEntry(c.catalogMetadataPath(), entry, etag, "provider catalog")
+}
+
+func (c *Client) writeCacheEntry(bodyPath string, metadataPath string, body []byte, etag string, subject string) error {
 	if c.cacheDir == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Join(c.cacheDir, "templates"), 0o755); err != nil {
-		return fmt.Errorf("create template cache directory: %w", err)
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o755); err != nil {
+		return fmt.Errorf("create cache directory for %s: %w", subject, err)
 	}
-	if err := os.WriteFile(c.templateCachePath(key), []byte(content), 0o644); err != nil {
-		return fmt.Errorf("write cached template for provider %s: %w", key, err)
+	metadata := cacheMetadata{
+		Version:        cacheMetadataVersion,
+		UpstreamCommit: c.upstreamCommit,
+		ETag:           etag,
+		FetchedAt:      time.Now().UTC(),
+		SHA256:         checksum(body),
+	}
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("encode cached %s metadata: %w", subject, err)
+	}
+	if err := os.WriteFile(bodyPath, body, 0o644); err != nil {
+		return fmt.Errorf("write cached %s body: %w", subject, err)
+	}
+	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
+		return fmt.Errorf("write cached %s metadata: %w", subject, err)
 	}
 	return nil
 }
 
 func (c *Client) templateCachePath(key string) string {
 	return filepath.Join(c.cacheDir, "templates", url.PathEscape(key)+".gitignore")
+}
+
+func (c *Client) templateMetadataPath(key string) string {
+	return filepath.Join(c.cacheDir, "templates", url.PathEscape(key)+".metadata.json")
+}
+
+func (c *Client) catalogCachePath() string {
+	return filepath.Join(c.cacheDir, "catalog.json")
+}
+
+func (c *Client) catalogMetadataPath() string {
+	return filepath.Join(c.cacheDir, "catalog.metadata.json")
+}
+
+func (c *Client) readCachedTemplateEntry(key string, requireFresh bool) (cacheEntry, error) {
+	return c.readCacheEntry(c.templateCachePath(key), c.templateMetadataPath(key), fmt.Sprintf("template for provider %s", key), requireFresh)
+}
+
+func (c *Client) readCachedCatalog(requireFresh bool) (cacheEntry, error) {
+	return c.readCacheEntry(c.catalogCachePath(), c.catalogMetadataPath(), "provider catalog", requireFresh)
+}
+
+func (c *Client) readCacheEntry(bodyPath string, metadataPath string, subject string, requireFresh bool) (cacheEntry, error) {
+	body, err := os.ReadFile(bodyPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return cacheEntry{}, err
+		}
+		return cacheEntry{}, fmt.Errorf("read cached %s body: %w", subject, err)
+	}
+	metadataBytes, err := os.ReadFile(metadataPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return cacheEntry{}, fmt.Errorf("cached %s metadata is missing", subject)
+		}
+		return cacheEntry{}, fmt.Errorf("read cached %s metadata: %w", subject, err)
+	}
+
+	var metadata cacheMetadata
+	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+		return cacheEntry{}, fmt.Errorf("decode cached %s metadata: %w", subject, err)
+	}
+	if metadata.Version != cacheMetadataVersion {
+		return cacheEntry{}, fmt.Errorf("cached %s metadata version %d is unsupported", subject, metadata.Version)
+	}
+	if metadata.UpstreamCommit == "" {
+		return cacheEntry{}, fmt.Errorf("cached %s is missing upstream commit metadata", subject)
+	}
+	if metadata.UpstreamCommit != c.upstreamCommit {
+		return cacheEntry{}, fmt.Errorf("cached %s was created for upstream commit %s, expected %s", subject, metadata.UpstreamCommit, c.upstreamCommit)
+	}
+	if metadata.FetchedAt.IsZero() {
+		return cacheEntry{}, fmt.Errorf("cached %s is missing fetched timestamp metadata", subject)
+	}
+	if metadata.SHA256 == "" {
+		return cacheEntry{}, fmt.Errorf("cached %s is missing integrity metadata", subject)
+	}
+	if checksum(body) != metadata.SHA256 {
+		return cacheEntry{}, fmt.Errorf("cached %s failed integrity validation", subject)
+	}
+
+	stale := time.Since(metadata.FetchedAt) > cacheFreshnessWindow
+	if requireFresh && stale {
+		return cacheEntry{}, fmt.Errorf("cached %s is stale; rerun without runtime.offline to refresh it", subject)
+	}
+
+	return cacheEntry{Body: body, Metadata: metadata, Stale: stale}, nil
+}
+
+func (c *Client) refreshCacheEntry(metadataPath string, entry cacheEntry, etag string, subject string) error {
+	if c.cacheDir == "" {
+		return nil
+	}
+	metadata := entry.Metadata
+	metadata.FetchedAt = time.Now().UTC()
+	if etag != "" {
+		metadata.ETag = etag
+	}
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("encode cached %s metadata: %w", subject, err)
+	}
+	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
+		return fmt.Errorf("write cached %s metadata: %w", subject, err)
+	}
+	return nil
+}
+
+func checksum(body []byte) string {
+	sum := sha256.Sum256(body)
+	return fmt.Sprintf("%x", sum)
 }
 
 func decodeProviderCatalog(body []byte) (map[string]string, error) {

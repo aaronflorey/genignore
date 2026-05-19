@@ -5,7 +5,7 @@
 - [x] `15-02` Add compiled-binary end-to-end CLI coverage and reduce machine-dependent detection with shared detector inputs.
 - [x] `15-03` Add fuzzing and benchmark coverage for managed-block rewriting and detector-performance-sensitive paths.
 - [x] `15-04` Add release or install smoke tests and document deliberate toolchain and dependency refresh workflows.
-- [ ] `16-01` Pin upstream template sourcing by commit SHA and tighten cache freshness, integrity, and conditional fetch behavior.
+- [x] `16-01` Pin upstream template sourcing by commit SHA and tighten cache freshness, integrity, and conditional fetch behavior.
 - [ ] `16-02` Add explain or doctor visibility, managed-block provenance, and a real diff-before-write flow.
 - [ ] `16-03` Build a real-repository fixture corpus and add machine-readable output-stability contract tests.
 - [ ] `16-04` Separate detection and provider resolution from file mutation for scripting and document the narrow deferred preset boundary.

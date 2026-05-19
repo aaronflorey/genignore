@@ -48,7 +48,7 @@ func NewService(cwd string, cfg Config) *Service {
 	return &Service{
 		CWD:       cwd,
 		Config:    cfg,
-		Client:    api.NewClientWithOptions(api.Options{Offline: cfg.Runtime.Offline}),
+		Client:    api.NewClientWithOptions(api.Options{Offline: cfg.Runtime.Offline, UpstreamCommit: cfg.Runtime.UpstreamCommit}),
 		Manager:   gitignore.NewManager(cwd),
 		Detectors: provider.Registry(),
 	}

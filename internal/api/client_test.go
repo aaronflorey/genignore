@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,9 +13,25 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aaronflorey/genignore/internal/providercatalog"
 )
+
+func TestNewClientWithOptionsPinsUpstreamCommit(t *testing.T) {
+	t.Parallel()
+
+	client := NewClientWithOptions(Options{UpstreamCommit: "1234567890abcdef1234567890abcdef12345678"})
+	if client.upstreamCommit != "1234567890abcdef1234567890abcdef12345678" {
+		t.Fatalf("unexpected upstream commit: %q", client.upstreamCommit)
+	}
+	if client.listURL != "https://api.github.com/repos/github/gitignore/git/trees/1234567890abcdef1234567890abcdef12345678?recursive=1" {
+		t.Fatalf("unexpected list URL: %q", client.listURL)
+	}
+	if client.templateURL != "https://raw.githubusercontent.com/github/gitignore/1234567890abcdef1234567890abcdef12345678/" {
+		t.Fatalf("unexpected template URL: %q", client.templateURL)
+	}
+}
 
 func TestClientUsesFixtures(t *testing.T) {
 	t.Parallel()
@@ -151,6 +170,35 @@ func TestFetchTemplateOfflineRequiresCachedRemoteTemplate(t *testing.T) {
 	}
 }
 
+func TestFetchTemplateOfflineRejectsStaleCachedTemplate(t *testing.T) {
+	t.Parallel()
+
+	client := NewClientWithOptions(Options{Offline: true})
+	client.cacheDir = t.TempDir()
+	writeCachedTemplateFixture(t, client, "node", []byte("node_modules/\n"), "etag-node", time.Now().Add(-cacheFreshnessWindow-time.Hour))
+
+	_, err := client.FetchTemplate(context.Background(), []string{"node"})
+	if err == nil || err.Error() != "cached template for provider node is stale; rerun without runtime.offline to refresh it" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFetchTemplateOfflineRejectsTamperedCachedTemplate(t *testing.T) {
+	t.Parallel()
+
+	client := NewClientWithOptions(Options{Offline: true})
+	client.cacheDir = t.TempDir()
+	writeCachedTemplateFixture(t, client, "node", []byte("node_modules/\n"), "etag-node", time.Now())
+	if err := os.WriteFile(client.templateCachePath("node"), []byte("tampered\n"), 0o644); err != nil {
+		t.Fatalf("tamper cache: %v", err)
+	}
+
+	_, err := client.FetchTemplate(context.Background(), []string{"node"})
+	if err == nil || err.Error() != "cached template for provider node failed integrity validation" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestFetchTemplateSupportsEmbeddedCustomProviderWithoutRemoteRequest(t *testing.T) {
 	t.Parallel()
 
@@ -276,6 +324,81 @@ func TestFetchTemplateUsesSingleCatalogLookupForRemoteProviders(t *testing.T) {
 	}
 }
 
+func TestFetchTemplateReusesCachedBodyOnNotModified(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	client := NewClientWithOptions(Options{})
+	client.cacheDir = cacheDir
+	writeCachedTemplateFixture(t, client, "node", []byte("node_modules/\n"), "etag-node", time.Now().Add(-cacheFreshnessWindow-time.Hour))
+	writeCachedCatalogFixture(t, client, []byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`), "etag-catalog", time.Now())
+
+	templateRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/catalog":
+			if got := r.Header.Get("If-None-Match"); got != "etag-catalog" {
+				t.Fatalf("unexpected catalog etag header: %q", got)
+			}
+			w.WriteHeader(http.StatusNotModified)
+		case "/templates/Node.gitignore":
+			templateRequests++
+			if got := r.Header.Get("If-None-Match"); got != "etag-node" {
+				t.Fatalf("unexpected template etag header: %q", got)
+			}
+			w.WriteHeader(http.StatusNotModified)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	client.listURL = server.URL + "/catalog"
+	client.templateURL = server.URL + "/templates/"
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"node"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if resp.Content != "node_modules/" {
+		t.Fatalf("unexpected cached template content: %q", resp.Content)
+	}
+	if templateRequests != 1 {
+		t.Fatalf("expected one template request, got %d", templateRequests)
+	}
+	entry, err := client.readCachedTemplateEntry("node", false)
+	if err != nil {
+		t.Fatalf("read refreshed cache: %v", err)
+	}
+	if time.Since(entry.Metadata.FetchedAt) > time.Minute {
+		t.Fatalf("expected cache metadata timestamp refresh, got %s", entry.Metadata.FetchedAt)
+	}
+}
+
+func TestFetchProviderCatalogReusesCachedBodyOnNotModified(t *testing.T) {
+	t.Parallel()
+
+	client := NewClientWithOptions(Options{})
+	client.cacheDir = t.TempDir()
+	writeCachedCatalogFixture(t, client, []byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`), "etag-catalog", time.Now().Add(-cacheFreshnessWindow-time.Hour))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("If-None-Match"); got != "etag-catalog" {
+			t.Fatalf("unexpected catalog etag header: %q", got)
+		}
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer server.Close()
+	client.listURL = server.URL
+
+	catalog, err := client.fetchProviderCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("fetchProviderCatalog failed: %v", err)
+	}
+	if !reflect.DeepEqual(catalog, map[string]string{"node": "Node.gitignore"}) {
+		t.Fatalf("unexpected catalog: %v", catalog)
+	}
+}
+
 func TestFetchTemplateMergesRemoteAndWranglerEmbeddedTemplates(t *testing.T) {
 	t.Parallel()
 
@@ -345,5 +468,39 @@ func TestFetchTemplateResolvesGlobalTemplatePathsAndPreservesRequestedOrder(t *t
 	}
 	if resp.Content != ".DS_Store\n\nbin/" {
 		t.Fatalf("unexpected merged content: %q", resp.Content)
+	}
+}
+
+func writeCachedTemplateFixture(t *testing.T, client *Client, key string, body []byte, etag string, fetchedAt time.Time) {
+	t.Helper()
+	writeCachedFixture(t, client.templateCachePath(key), client.templateMetadataPath(key), client.upstreamCommit, body, etag, fetchedAt)
+}
+
+func writeCachedCatalogFixture(t *testing.T, client *Client, body []byte, etag string, fetchedAt time.Time) {
+	t.Helper()
+	writeCachedFixture(t, client.catalogCachePath(), client.catalogMetadataPath(), client.upstreamCommit, body, etag, fetchedAt)
+}
+
+func writeCachedFixture(t *testing.T, bodyPath string, metadataPath string, upstreamCommit string, body []byte, etag string, fetchedAt time.Time) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o755); err != nil {
+		t.Fatalf("mkdir cache dir: %v", err)
+	}
+	if err := os.WriteFile(bodyPath, body, 0o644); err != nil {
+		t.Fatalf("write cache body: %v", err)
+	}
+	sum := sha256.Sum256(body)
+	metadataBytes, err := json.Marshal(cacheMetadata{
+		Version:        cacheMetadataVersion,
+		UpstreamCommit: upstreamCommit,
+		ETag:           etag,
+		FetchedAt:      fetchedAt.UTC(),
+		SHA256:         fmt.Sprintf("%x", sum),
+	})
+	if err != nil {
+		t.Fatalf("marshal cache metadata: %v", err)
+	}
+	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
+		t.Fatalf("write cache metadata: %v", err)
 	}
 }

@@ -2,8 +2,10 @@ package app
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +13,9 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/aaronflorey/genignore/internal/api"
 	"github.com/aaronflorey/genignore/internal/gitignore"
 )
 
@@ -173,6 +177,7 @@ func prepareOfflineHome(t *testing.T, templates map[string]string) string {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatalf("write cache template: %v", err)
 		}
+		writeTemplateMetadata(t, cacheHome, key, []byte(content))
 	}
 	if osProvider := runtimeProviderKey(); osProvider != "" {
 		if _, ok := templates[osProvider]; !ok {
@@ -183,10 +188,22 @@ func prepareOfflineHome(t *testing.T, templates map[string]string) string {
 			if err := os.WriteFile(path, nil, 0o644); err != nil {
 				t.Fatalf("write os cache template: %v", err)
 			}
+			writeTemplateMetadata(t, cacheHome, osProvider, nil)
 		}
 	}
 
 	return homeDir
+}
+
+func writeTemplateMetadata(t *testing.T, cacheHome string, key string, body []byte) {
+	t.Helper()
+
+	metadataPath := filepath.Join(cacheHome, "genignore", "github-gitignore", "templates", key+".metadata.json")
+	sum := sha256.Sum256(body)
+	metadata := fmt.Sprintf("{\"version\":1,\"upstream_commit\":%q,\"fetched_at\":%q,\"sha256\":%q}", api.DefaultUpstreamCommit, time.Now().UTC().Format(time.RFC3339Nano), fmt.Sprintf("%x", sum))
+	if err := os.WriteFile(metadataPath, []byte(metadata), 0o644); err != nil {
+		t.Fatalf("write cache metadata: %v", err)
+	}
 }
 
 func runtimeProviderKey() string {

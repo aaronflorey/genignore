@@ -37,6 +37,7 @@ func TestLoadConfigValidFile(t *testing.T) {
 		"ignore_rules = [\".direnv/\", \"coverage.out\"]",
 		"[runtime]",
 		"offline = true",
+		"upstream_commit = \"1234567890abcdef1234567890abcdef12345678\"",
 		"",
 	}, "\n")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -59,6 +60,9 @@ func TestLoadConfigValidFile(t *testing.T) {
 	}
 	if !cfg.Runtime.Offline {
 		t.Fatalf("expected runtime.offline to load from config")
+	}
+	if cfg.Runtime.UpstreamCommit != "1234567890abcdef1234567890abcdef12345678" {
+		t.Fatalf("unexpected runtime.upstream_commit: %q", cfg.Runtime.UpstreamCommit)
 	}
 }
 
@@ -135,6 +139,7 @@ func TestRunLoadsConfigAndPassesItToService(t *testing.T) {
 		"ignore_rules = [\".direnv/\"]",
 		"[runtime]",
 		"offline = true",
+		"upstream_commit = \"1234567890abcdef1234567890abcdef12345678\"",
 		"",
 	}, "\n")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -151,6 +156,9 @@ func TestRunLoadsConfigAndPassesItToService(t *testing.T) {
 		}
 		if !cfg.Runtime.Offline {
 			t.Fatalf("expected runtime.offline to be passed through to the service")
+		}
+		if cfg.Runtime.UpstreamCommit != "1234567890abcdef1234567890abcdef12345678" {
+			t.Fatalf("unexpected runtime.upstream_commit: %q", cfg.Runtime.UpstreamCommit)
 		}
 		return stubCommandService{detectResult: CommandResult{Command: "detect", FinalProviders: []string{"wrangler"}, FileAction: gitignore.FileActionDryRun}}
 	}
