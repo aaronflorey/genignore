@@ -92,6 +92,27 @@ Output labels in human-readable mode include `Command:`, `Target:`, `Detected:`,
 
 Default editor detection is intentionally repo-backed: `visualstudiocode` is detected from `.vscode/` or `*.code-workspace`, and `jetbrains` is detected from `.idea/` or `*.iml`. Installed editors alone do not change default detection results.
 
+## Development
+
+Run the managed-block regression tests:
+
+```bash
+go test ./internal/gitignore
+```
+
+Run the managed-block rewrite benchmarks intentionally:
+
+```bash
+go test -run '^$' -bench . ./internal/gitignore
+```
+
+Run the managed-block fuzz targets intentionally:
+
+```bash
+go test -run '^$' -fuzz=FuzzParseManagedProvidersRoundTrip -fuzztime=10s ./internal/gitignore
+go test -run '^$' -fuzz=FuzzMergeManagedBlock -fuzztime=10s ./internal/gitignore
+```
+
 ## License
 
 No `LICENSE` file is currently present in this repository.

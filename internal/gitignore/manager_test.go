@@ -275,6 +275,71 @@ func TestUpsertRejectsMalformedMarkers(t *testing.T) {
 	}
 }
 
+func TestUpsertRejectsDuplicateManagedMarkers(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"before",
+		StartMarker,
+		"old",
+		EndMarker,
+		StartMarker,
+		"duplicate",
+		EndMarker,
+		"after",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed file failed: %v", err)
+	}
+
+	m := NewManager(dir)
+	block := BuildManagedBlock([]string{"go"}, "bin/")
+	if _, err := m.UpsertManagedBlock(block, false); err == nil {
+		t.Fatalf("expected duplicate marker error")
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	if string(content) != seed {
+		t.Fatalf("duplicate marker input should remain unchanged")
+	}
+}
+
+func TestUpsertRejectsEndMarkerBeforeStartMarker(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"before",
+		EndMarker,
+		"old",
+		StartMarker,
+		"after",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed file failed: %v", err)
+	}
+
+	m := NewManager(dir)
+	block := BuildManagedBlock([]string{"go"}, "bin/")
+	if _, err := m.UpsertManagedBlock(block, false); err == nil {
+		t.Fatalf("expected reversed marker error")
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	if string(content) != seed {
+		t.Fatalf("reversed marker input should remain unchanged")
+	}
+}
+
 func TestUpsertIsIdempotentForEquivalentRun(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
