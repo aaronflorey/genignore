@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/aaronflorey/genignore/internal/api"
 	"github.com/aaronflorey/genignore/internal/customtemplate"
@@ -16,6 +17,7 @@ import (
 type APIClient interface {
 	AvailableProviders(ctx context.Context) ([]string, error)
 	FetchTemplate(ctx context.Context, providers []string) (api.TemplateResponse, error)
+	InspectRuntime(providers []string) api.RuntimeDiagnostics
 }
 
 type Service struct {
@@ -35,12 +37,14 @@ type DetectOptions struct {
 	Include []string
 	Exclude []string
 	DryRun  bool
+	Diff    bool
 	Verbose bool
 }
 
 type AddOptions struct {
 	Keys    []string
 	DryRun  bool
+	Diff    bool
 	Verbose bool
 }
 
@@ -64,7 +68,8 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 	exclude, excludeWarnings := sanitizeKeys(opts.Exclude)
 	warnings := append(includeWarnings, excludeWarnings...)
 
-	targetResult, err := s.detectTarget(ctx, s.CWD, s.Manager, include, exclude, opts.DryRun)
+	targetResult, err := s.detectTarget(ctx, s.CWD, s.Manager, include, exclude, opts.DryRun, opts.Diff)
+	previewOnly := opts.Diff
 	if err != nil {
 		return CommandResult{}, err
 	}
@@ -81,10 +86,13 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 		RemoteProviderWarnings: targetResult.RemoteProviderWarnings,
 		DetectionResults:       targetResult.DetectionResults,
 		FileAction:             targetResult.FileAction,
+		PreviewOnly:            previewOnly,
+		Diff:                   targetResult.Diff,
 		TemplateProviderCount:  targetResult.TemplateProviderCount,
 	}, nil
 }
-func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *gitignore.Manager, include []string, exclude []string, dryRun bool) (TargetResult, error) {
+
+func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *gitignore.Manager, include []string, exclude []string, dryRun bool, previewOnly bool) (TargetResult, error) {
 	targetResult, err := s.scanTarget(ctx, targetPath)
 	if err != nil {
 		return TargetResult{}, err
@@ -99,8 +107,8 @@ func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *
 	if err != nil {
 		return TargetResult{}, err
 	}
-	block := gitignore.BuildManagedBlock(finalProviders, template.Content, s.Config.Defaults.IgnoreRules)
-	action, err := manager.UpsertManagedBlock(block, dryRun)
+	block := gitignore.BuildManagedBlockWithMetadata(finalProviders, managedBlockMetadata(finalProviders, s.Config.Runtime.UpstreamCommit), template.Content, s.Config.Defaults.IgnoreRules)
+	action, diff, err := applyManagedBlock(manager, block, dryRun, previewOnly)
 	if err != nil {
 		return TargetResult{}, err
 	}
@@ -118,6 +126,7 @@ func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *
 		DetectionResults:       targetResult.DetectionResults,
 		RemoteProviderWarnings: remoteWarnings,
 		FileAction:             action,
+		Diff:                   diff,
 		TemplateProviderCount:  len(template.Providers),
 	}, nil
 }
@@ -217,13 +226,14 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 	if err != nil {
 		return CommandResult{}, err
 	}
-	block := gitignore.BuildManagedBlock(finalProviders, template.Content, s.Config.Defaults.IgnoreRules)
-	action, err := s.Manager.UpsertManagedBlock(block, opts.DryRun)
+	block := gitignore.BuildManagedBlockWithMetadata(finalProviders, managedBlockMetadata(finalProviders, s.Config.Runtime.UpstreamCommit), template.Content, s.Config.Defaults.IgnoreRules)
+	action, diff, err := applyManagedBlock(s.Manager, block, opts.DryRun, opts.Diff)
 	if err != nil {
 		return CommandResult{}, err
 	}
 
 	sort.Strings(added)
+	previewOnly := opts.Diff
 	return CommandResult{
 		Command:                "add",
 		CWD:                    s.CWD,
@@ -233,7 +243,44 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, finalProviders),
 		RemoteProviderWarnings: remoteWarningsFromTemplate(template),
 		FileAction:             action,
+		PreviewOnly:            previewOnly,
+		Diff:                   diff,
 		TemplateProviderCount:  len(template.Providers),
+	}, nil
+}
+
+func (s *Service) Doctor(ctx context.Context, opts DoctorOptions) (DoctorResult, error) {
+	includeInput := opts.Include
+	if len(includeInput) == 0 {
+		includeInput = s.Config.Defaults.Providers
+	}
+
+	include, includeWarnings := sanitizeKeys(includeInput)
+	exclude, excludeWarnings := sanitizeKeys(opts.Exclude)
+	warnings := append(includeWarnings, excludeWarnings...)
+
+	targetResult, err := s.scanTarget(ctx, s.CWD)
+	if err != nil {
+		return DoctorResult{}, err
+	}
+	finalProviders, err := s.detectFinalProviders(targetResult.DetectedProviders, include, exclude)
+	if err != nil {
+		return DoctorResult{}, err
+	}
+	runtimeInfo := s.Client.InspectRuntime(finalProviders)
+
+	return DoctorResult{
+		Command:                "doctor",
+		CWD:                    s.CWD,
+		DetectedProviders:      targetResult.DetectedProviders,
+		IncludedProviders:      include,
+		ExcludedProviders:      exclude,
+		FinalProviders:         finalProviders,
+		UnsupportedKeyWarnings: warnings,
+		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, finalProviders),
+		Detections:             doctorDetections(targetResult.DetectionResults),
+		Runtime:                doctorRuntime(runtimeInfo),
+		Provenance:             managedBlockMetadata(finalProviders, s.Config.Runtime.UpstreamCommit),
 	}, nil
 }
 
@@ -296,6 +343,103 @@ func hasRemoteProviders(providers []string) bool {
 		}
 	}
 	return false
+}
+
+func applyManagedBlock(manager *gitignore.Manager, block string, dryRun bool, previewOnly bool) (gitignore.FileAction, string, error) {
+	if previewOnly {
+		preview, err := manager.PreviewManagedBlock(block)
+		if err != nil {
+			return "", "", err
+		}
+		return preview.Action, preview.Diff, nil
+	}
+	if dryRun {
+		action, err := manager.UpsertManagedBlock(block, true)
+		return action, "", err
+	}
+	preview, err := manager.PreviewManagedBlock(block)
+	if err != nil {
+		return "", "", err
+	}
+	if preview.Action == gitignore.FileActionNoOp {
+		return gitignore.FileActionNoOp, preview.Diff, nil
+	}
+	action, err := manager.UpsertManagedBlock(block, false)
+	if err != nil {
+		return "", "", err
+	}
+	return action, preview.Diff, nil
+}
+
+func managedBlockMetadata(providers []string, upstreamCommit string) []string {
+	remoteProviders := make([]string, 0, len(providers))
+	embeddedProviders := make([]string, 0, len(providers))
+	for _, key := range providers {
+		if customtemplate.HasProvider(key) {
+			embeddedProviders = append(embeddedProviders, key)
+			continue
+		}
+		remoteProviders = append(remoteProviders, key)
+	}
+
+	parts := make([]string, 0, 2)
+	if len(remoteProviders) > 0 {
+		commit := strings.TrimSpace(upstreamCommit)
+		if commit == "" {
+			commit = api.DefaultUpstreamCommit
+		}
+		parts = append(parts, fmt.Sprintf("github/gitignore@%s [%s]", commit, strings.Join(remoteProviders, ",")))
+	}
+	if len(embeddedProviders) > 0 {
+		parts = append(parts, fmt.Sprintf("embedded [%s]", strings.Join(embeddedProviders, ",")))
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	return []string{"# Provenance: " + strings.Join(parts, "; ")}
+}
+
+func doctorDetections(results []provider.Result) []DoctorDetection {
+	detections := make([]DoctorDetection, 0, len(results))
+	for _, result := range results {
+		detections = append(detections, DoctorDetection{
+			Key:      result.Key,
+			Matched:  result.Matched,
+			Origin:   detectionOrigin(result),
+			Reason:   result.Reason,
+			Evidence: result.Evidence,
+			Error:    result.Error,
+		})
+	}
+	return detections
+}
+
+func doctorRuntime(runtimeInfo api.RuntimeDiagnostics) DoctorRuntime {
+	cacheEntries := make([]DoctorCacheEntry, 0, len(runtimeInfo.CacheEntries))
+	for _, entry := range runtimeInfo.CacheEntries {
+		cacheEntries = append(cacheEntries, DoctorCacheEntry{Provider: entry.Provider, State: entry.State, Detail: entry.Detail})
+	}
+	return DoctorRuntime{
+		UpstreamCommit:    runtimeInfo.UpstreamCommit,
+		Offline:           runtimeInfo.Offline,
+		RemoteProviders:   runtimeInfo.RemoteProviders,
+		EmbeddedProviders: runtimeInfo.EmbeddedProviders,
+		CacheEntries:      cacheEntries,
+		Decisions:         runtimeInfo.Decisions,
+	}
+}
+
+func detectionOrigin(result provider.Result) string {
+	switch {
+	case strings.Contains(result.Reason, "runtime OS"):
+		return "host"
+	case strings.Contains(result.Reason, "installed application") || strings.Contains(result.Reason, "application not found"):
+		return "host"
+	case strings.Contains(result.Reason, "jetbrains install"):
+		return "repository+host"
+	default:
+		return "repository"
+	}
 }
 
 func makeSet(keys []string) map[string]struct{} {

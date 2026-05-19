@@ -83,6 +83,20 @@ func TestBuildManagedBlockIsStableForCleanTemplate(t *testing.T) {
 	}
 }
 
+func TestBuildManagedBlockWithMetadataIsStable(t *testing.T) {
+	t.Parallel()
+
+	first := BuildManagedBlockWithMetadata([]string{"go"}, []string{"# Provenance: github/gitignore@abc123 [go]"}, "bin/\n")
+	second := BuildManagedBlockWithMetadata([]string{"go"}, []string{"# Provenance: github/gitignore@abc123 [go]"}, "bin/\n")
+
+	if first != second {
+		t.Fatalf("expected stable managed block output\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+	if !strings.Contains(first, "# Provenance: github/gitignore@abc123 [go]") {
+		t.Fatalf("expected provenance metadata in managed block\n%s", first)
+	}
+}
+
 func TestBuildManagedBlockStripsGitHubSourceComments(t *testing.T) {
 	t.Parallel()
 
@@ -99,6 +113,29 @@ func TestBuildManagedBlockStripsGitHubSourceComments(t *testing.T) {
 
 	if !strings.Contains(block, "bin/") || !strings.Contains(block, ".DS_Store") {
 		t.Fatalf("expected managed block to preserve template rules\n%s", block)
+	}
+}
+
+func TestPreviewManagedBlockShowsManagedDiff(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	m := NewManager(dir)
+	if _, err := m.UpsertManagedBlock(BuildManagedBlock([]string{"go"}, "bin/\n"), false); err != nil {
+		t.Fatalf("seed failed: %v", err)
+	}
+
+	preview, err := m.PreviewManagedBlock(BuildManagedBlockWithMetadata([]string{"go", "node"}, []string{"# Provenance: github/gitignore@abc123 [go,node]"}, "bin/\n\nnode_modules/\n"))
+	if err != nil {
+		t.Fatalf("preview failed: %v", err)
+	}
+	if preview.Action != FileActionUpdated {
+		t.Fatalf("expected updated preview action, got %s", preview.Action)
+	}
+	for _, fragment := range []string{"--- .gitignore", "@@ managed-block @@", "-# Providers: go", "+# Providers: go,node", "+# Provenance: github/gitignore@abc123 [go,node]"} {
+		if !strings.Contains(preview.Diff, fragment) {
+			t.Fatalf("missing %q in diff:\n%s", fragment, preview.Diff)
+		}
 	}
 }
 

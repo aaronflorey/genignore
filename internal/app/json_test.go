@@ -28,6 +28,8 @@ func TestJSONDetectCommandContract(t *testing.T) {
 				{Key: "node", Matched: true, Reason: "found package.json", Evidence: "/tmp/project/package.json"},
 			},
 			FileAction:            gitignore.FileActionDryRun,
+			PreviewOnly:           true,
+			Diff:                  "--- .gitignore\n+++ .gitignore\n@@ managed-block @@\n-# old\n+# new",
 			TemplateProviderCount: 3,
 		}}
 	}
@@ -75,8 +77,61 @@ func TestJSONDetectCommandContract(t *testing.T) {
 	if payload.FileAction != gitignore.FileActionDryRun {
 		t.Fatalf("unexpected file action: %s", payload.FileAction)
 	}
+	if !payload.PreviewOnly || payload.Diff == "" {
+		t.Fatalf("expected preview metadata in payload: %+v", payload)
+	}
 	if payload.TemplateProviderCount != 3 {
 		t.Fatalf("unexpected template provider count: %d", payload.TemplateProviderCount)
+	}
+	if strings.Contains(stdout, "Command:") {
+		t.Fatalf("json payload contains human-readable labels: %s", stdout)
+	}
+}
+
+func TestJSONDoctorCommandContract(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{doctorResult: DoctorResult{
+			Command:           "doctor",
+			CWD:               "/tmp/project",
+			DetectedProviders: []string{"go", "node"},
+			FinalProviders:    []string{"go", "node"},
+			Detections:        []DoctorDetection{{Key: "go", Matched: true, Origin: "repository", Reason: "found go.mod", Evidence: "/tmp/project/go.mod"}},
+			Runtime: DoctorRuntime{
+				UpstreamCommit:  "abc123",
+				Offline:         true,
+				RemoteProviders: []string{"go", "node"},
+				CacheEntries:    []DoctorCacheEntry{{Provider: "go", State: "fresh"}},
+				Decisions:       []string{"runtime.offline is enabled, so remote templates must come from the local cache without a live GitHub refresh"},
+			},
+			Provenance: []string{"# Provenance: github/gitignore@abc123 [go,node]"},
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"doctor", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+
+	var payload DoctorResult
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("invalid json output: %v", err)
+	}
+	if payload.Command != "doctor" || payload.CWD != "/tmp/project" {
+		t.Fatalf("unexpected doctor metadata: %+v", payload)
+	}
+	if len(payload.Detections) != 1 || payload.Detections[0].Origin != "repository" {
+		t.Fatalf("unexpected detections: %+v", payload.Detections)
+	}
+	if payload.Runtime.UpstreamCommit != "abc123" || !payload.Runtime.Offline {
+		t.Fatalf("unexpected runtime payload: %+v", payload.Runtime)
+	}
+	if len(payload.Provenance) != 1 || !strings.Contains(payload.Provenance[0], "github/gitignore@abc123") {
+		t.Fatalf("unexpected provenance payload: %+v", payload.Provenance)
 	}
 	if strings.Contains(stdout, "Command:") {
 		t.Fatalf("json payload contains human-readable labels: %s", stdout)

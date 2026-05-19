@@ -30,6 +30,12 @@ genignore detect
 genignore detect --dry-run
 ```
 
+Or preview the exact managed-block diff without writing files:
+
+```bash
+genignore detect --diff
+```
+
 3. Add specific providers to the existing managed set:
 
 ```bash
@@ -72,6 +78,13 @@ Run detection with machine-readable JSON output:
 genignore detect --json
 ```
 
+Explain the current detector evidence, provider resolution, cache state, and runtime decisions:
+
+```bash
+genignore doctor
+genignore doctor --json
+```
+
 Exclude certain providers from detection:
 
 ```bash
@@ -94,7 +107,13 @@ The canonical supported-provider contract is the checked-in GitHub catalog snaps
 
 Online runs store cache metadata alongside remote catalog and template bodies, including the pinned upstream commit, `ETag`, fetch time, and checksum. When cached metadata is still valid, `genignore` sends `If-None-Match` and reuses cached content on `304 Not Modified` instead of downloading the same payload again.
 
-Output labels in human-readable mode include `Command:`, `Target:`, `Detected:`, `Final:`, `Added:`, `Included:`, `Excluded:`, `File:`, and `Warning:`.
+Generated managed blocks now include a deterministic `# Provenance:` line that records the pinned `github/gitignore` commit and any embedded providers that contributed content.
+
+`genignore doctor` is the supported diagnostics surface for detector evidence, provider resolution, cache state, and degraded-runtime decisions. Detection entries classify repository-backed evidence separately from host-only heuristics such as runtime OS or installed-application checks.
+
+`genignore detect --diff` and `genignore add --diff` preview the exact managed-block change without writing `.gitignore`. The preview reports the same `File:` action that the eventual write path would take: `created`, `updated`, or `no-op`.
+
+Output labels in human-readable mode include `Command:`, `Target:`, `Detected:`, `Final:`, `Added:`, `Included:`, `Excluded:`, `File:`, `Preview:`, `Diff:`, `Warning:`, `Detection:`, `Offline:`, `Upstream:`, `Remote:`, `Embedded:`, `Cache:`, `Decision:`, and `Provenance:`.
 
 Default editor detection is intentionally repo-backed: `visualstudiocode` is detected from `.vscode/` or `*.code-workspace`, and `jetbrains` is detected from `.idea/` or `*.iml`. Installed editors alone do not change default detection results.
 

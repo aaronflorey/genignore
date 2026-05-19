@@ -34,6 +34,21 @@ type TemplateResponse struct {
 	AvailableProviders []string `json:"-"`
 }
 
+type RuntimeDiagnostics struct {
+	UpstreamCommit    string
+	Offline           bool
+	RemoteProviders   []string
+	EmbeddedProviders []string
+	CacheEntries      []CacheEntryStatus
+	Decisions         []string
+}
+
+type CacheEntryStatus struct {
+	Provider string
+	State    string
+	Detail   string
+}
+
 type Options struct {
 	Offline        bool
 	UpstreamCommit string
@@ -91,20 +106,28 @@ func (c *Client) AvailableProviders(ctx context.Context) ([]string, error) {
 	return providercatalog.RemoteSupportedKeys(), nil
 }
 
+func (c *Client) InspectRuntime(providers []string) RuntimeDiagnostics {
+	remoteProviders, customProviders := splitProvidersBySource(providers)
+	diagnostics := RuntimeDiagnostics{
+		UpstreamCommit:    c.upstreamCommit,
+		Offline:           c.offline,
+		RemoteProviders:   remoteProviders,
+		EmbeddedProviders: customProviders,
+		CacheEntries:      make([]CacheEntryStatus, 0, len(remoteProviders)),
+	}
+	for _, key := range remoteProviders {
+		diagnostics.CacheEntries = append(diagnostics.CacheEntries, c.inspectTemplateCache(key))
+	}
+	diagnostics.Decisions = append(diagnostics.Decisions, runtimeDecisions(c.offline, remoteProviders, customProviders)...)
+	return diagnostics
+}
+
 func (c *Client) FetchTemplate(ctx context.Context, providers []string) (TemplateResponse, error) {
 	if len(providers) == 0 {
 		return TemplateResponse{}, fmt.Errorf("providers must not be empty")
 	}
 	var availableProviders []string
-	remoteProviders := make([]string, 0, len(providers))
-	customProviders := make([]string, 0, len(providers))
-	for _, key := range providers {
-		if customtemplate.HasProvider(key) {
-			customProviders = append(customProviders, key)
-			continue
-		}
-		remoteProviders = append(remoteProviders, key)
-	}
+	remoteProviders, customProviders := splitProvidersBySource(providers)
 
 	parts := make([]string, 0, 2)
 	if len(remoteProviders) > 0 {
@@ -150,6 +173,19 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 	}
 
 	return TemplateResponse{Providers: providers, Content: strings.Join(parts, "\n\n"), AvailableProviders: availableProviders}, nil
+}
+
+func splitProvidersBySource(providers []string) ([]string, []string) {
+	remoteProviders := make([]string, 0, len(providers))
+	customProviders := make([]string, 0, len(providers))
+	for _, key := range providers {
+		if customtemplate.HasProvider(key) {
+			customProviders = append(customProviders, key)
+			continue
+		}
+		remoteProviders = append(remoteProviders, key)
+	}
+	return remoteProviders, customProviders
 }
 
 func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, error) {
@@ -386,6 +422,36 @@ func (c *Client) readCacheEntry(bodyPath string, metadataPath string, subject st
 	}
 
 	return cacheEntry{Body: body, Metadata: metadata, Stale: stale}, nil
+}
+
+func (c *Client) inspectTemplateCache(key string) CacheEntryStatus {
+	entry, err := c.readCachedTemplateEntry(key, false)
+	if err == nil {
+		state := "fresh"
+		if entry.Stale {
+			state = "stale"
+		}
+		return CacheEntryStatus{Provider: key, State: state}
+	}
+	if _, statErr := os.Stat(c.templateCachePath(key)); os.IsNotExist(statErr) {
+		return CacheEntryStatus{Provider: key, State: "missing"}
+	}
+	return CacheEntryStatus{Provider: key, State: "invalid", Detail: err.Error()}
+}
+
+func runtimeDecisions(offline bool, remoteProviders []string, customProviders []string) []string {
+	decisions := []string{"supported providers are validated against the checked-in GitHub catalog snapshot plus embedded exceptions"}
+	if len(remoteProviders) == 0 {
+		return append(decisions, "no remote template fetch is required because the selection is satisfied entirely by embedded providers")
+	}
+	if offline {
+		return append(decisions, "runtime.offline is enabled, so remote templates must come from the local cache without a live GitHub refresh")
+	}
+	decisions = append(decisions, "remote templates are fetched from github/gitignore and cached metadata can reuse ETags on unchanged responses")
+	if len(customProviders) > 0 {
+		decisions = append(decisions, "embedded providers are merged with remote templates after provider resolution")
+	}
+	return decisions
 }
 
 func (c *Client) refreshCacheEntry(metadataPath string, entry cacheEntry, etag string, subject string) error {

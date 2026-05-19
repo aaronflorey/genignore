@@ -20,6 +20,8 @@ type stubCommandService struct {
 	detectErr    error
 	addResult    CommandResult
 	addErr       error
+	doctorResult DoctorResult
+	doctorErr    error
 }
 
 type stubCatalogClient struct {
@@ -33,6 +35,10 @@ func (s stubCommandService) Detect(_ context.Context, _ DetectOptions) (CommandR
 
 func (s stubCommandService) Add(_ context.Context, _ AddOptions) (CommandResult, error) {
 	return s.addResult, s.addErr
+}
+
+func (s stubCommandService) Doctor(_ context.Context, _ DoctorOptions) (DoctorResult, error) {
+	return s.doctorResult, s.doctorErr
 }
 
 func (s stubCatalogClient) AvailableProviders(_ context.Context) ([]string, error) {
@@ -233,6 +239,70 @@ func TestDetectDefaultCommandOutputShowsNoOpFileAction(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "File: no-op") {
 		t.Fatalf("missing no-op file action: %s", stdout)
+	}
+}
+
+func TestDetectDiffCommandOutputShowsPreviewAndDiff(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{detectResult: CommandResult{
+			Command:        "detect",
+			FinalProviders: []string{"go"},
+			FileAction:     gitignore.FileActionUpdated,
+			PreviewOnly:    true,
+			Diff:           "--- .gitignore\n+++ .gitignore\n@@ managed-block @@\n-# old\n+# new",
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"detect", "--diff"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	for _, fragment := range []string{"File: updated", "Preview: diff-only (no file written)", "Diff:", "--- .gitignore", "+# new"} {
+		if !strings.Contains(stdout, fragment) {
+			t.Fatalf("missing %q in stdout: %s", fragment, stdout)
+		}
+	}
+}
+
+func TestDoctorCommandOutputShowsDiagnostics(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{doctorResult: DoctorResult{
+			Command:           "doctor",
+			DetectedProviders: []string{"go", "node"},
+			FinalProviders:    []string{"go", "node"},
+			Detections: []DoctorDetection{
+				{Key: "go", Origin: "repository", Matched: true, Reason: "found go.mod", Evidence: "/tmp/project/go.mod"},
+				{Key: "macos", Origin: "host", Matched: true, Reason: "matched runtime OS", Evidence: "darwin"},
+			},
+			Runtime: DoctorRuntime{
+				Offline:         true,
+				UpstreamCommit:  "abc123",
+				RemoteProviders: []string{"go", "node"},
+				CacheEntries:    []DoctorCacheEntry{{Provider: "go", State: "fresh"}},
+				Decisions:       []string{"runtime.offline is enabled, so remote templates must come from the local cache without a live GitHub refresh"},
+			},
+			Provenance: []string{"# Provenance: github/gitignore@abc123 [go,node]"},
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"doctor"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	for _, fragment := range []string{"Command: doctor", "Detected: go, node", "Detection: go | repository | matched | found go.mod | /tmp/project/go.mod", "Detection: macos | host | matched | matched runtime OS | darwin", "Offline: true", "Upstream: abc123", "Cache: go | fresh", "Decision: runtime.offline is enabled", "Provenance: github/gitignore@abc123 [go,node]"} {
+		if !strings.Contains(stdout, fragment) {
+			t.Fatalf("missing %q in stdout: %s", fragment, stdout)
+		}
 	}
 }
 

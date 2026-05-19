@@ -34,6 +34,7 @@ const noisyToptalTemplate = `# Created by https://www.toptal.com/developers/giti
 type fakeAPI struct {
 	available      []string
 	template       string
+	runtime        api.RuntimeDiagnostics
 	availableErr   error
 	templateErr    error
 	availableCalls int
@@ -61,6 +62,22 @@ func (f *fakeAPI) FetchTemplate(_ context.Context, providers []string) (api.Temp
 	}
 	f.requests = append(f.requests, append([]string{}, providers...))
 	return api.TemplateResponse{Providers: providers, Content: f.template, AvailableProviders: f.available}, nil
+}
+
+func (f *fakeAPI) InspectRuntime(providers []string) api.RuntimeDiagnostics {
+	if len(f.runtime.RemoteProviders) == 0 && len(f.runtime.EmbeddedProviders) == 0 {
+		remoteProviders := make([]string, 0, len(providers))
+		embeddedProviders := make([]string, 0, len(providers))
+		for _, key := range providers {
+			if customtemplate.HasProvider(key) {
+				embeddedProviders = append(embeddedProviders, key)
+				continue
+			}
+			remoteProviders = append(remoteProviders, key)
+		}
+		return api.RuntimeDiagnostics{RemoteProviders: remoteProviders, EmbeddedProviders: embeddedProviders}
+	}
+	return f.runtime
 }
 
 func matchedDetector(key string) provider.Detector {

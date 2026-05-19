@@ -90,7 +90,11 @@ func TestCompiledBinaryAddUpdatesManagedBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
-	expected := gitignore.BuildManagedBlock([]string{"go", "node"}, "bin/\n\nnode_modules/\n") + "# user rule\ncoverage.out\n"
+	expected := gitignore.BuildManagedBlockWithMetadata(
+		[]string{"go", "node"},
+		[]string{"# Provenance: github/gitignore@" + api.DefaultUpstreamCommit + " [go,node]"},
+		"bin/\n\nnode_modules/\n",
+	) + "# user rule\ncoverage.out\n"
 	if string(content) != expected {
 		t.Fatalf("unexpected .gitignore contents\nwant:\n%s\n got:\n%s", expected, string(content))
 	}

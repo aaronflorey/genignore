@@ -17,6 +17,7 @@ import (
 type commandService interface {
 	Detect(ctx context.Context, opts DetectOptions) (CommandResult, error)
 	Add(ctx context.Context, opts AddOptions) (CommandResult, error)
+	Doctor(ctx context.Context, opts DoctorOptions) (DoctorResult, error)
 }
 
 var newCommandService = func(cwd string, cfg Config) commandService {
@@ -59,6 +60,7 @@ func Run(args []string) int {
 
 	var include, exclude []string
 	var dryRun bool
+	var diff bool
 	detectCmd := &cobra.Command{
 		Use:   "detect",
 		Short: "Detect providers and rebuild managed block",
@@ -67,6 +69,7 @@ func Run(args []string) int {
 				Include: include,
 				Exclude: exclude,
 				DryRun:  dryRun,
+				Diff:    diff,
 				Verbose: verbose,
 			})
 			if runErr != nil {
@@ -79,8 +82,10 @@ func Run(args []string) int {
 	detectCmd.Flags().StringSliceVar(&include, "include", nil, "provider keys to include")
 	detectCmd.Flags().StringSliceVar(&exclude, "exclude", nil, "provider keys to exclude")
 	detectCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would change without writing files")
+	detectCmd.Flags().BoolVar(&diff, "diff", false, "show the exact managed-block diff without writing files")
 
 	var addDryRun bool
+	var addDiff bool
 	addCmd := &cobra.Command{
 		Use:   "add <keys...>",
 		Short: "Add providers to existing managed set",
@@ -89,6 +94,7 @@ func Run(args []string) int {
 			res, runErr := service.Add(context.Background(), AddOptions{
 				Keys:    keys,
 				DryRun:  addDryRun,
+				Diff:    addDiff,
 				Verbose: verbose,
 			})
 			if runErr != nil {
@@ -99,6 +105,23 @@ func Run(args []string) int {
 		},
 	}
 	addCmd.Flags().BoolVar(&addDryRun, "dry-run", false, "show what would change without writing files")
+	addCmd.Flags().BoolVar(&addDiff, "diff", false, "show the exact managed-block diff without writing files")
+
+	var doctorInclude, doctorExclude []string
+	doctorCmd := &cobra.Command{
+		Use:   "doctor",
+		Short: "Explain detection, provider resolution, and runtime decisions",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			res, runErr := service.Doctor(context.Background(), DoctorOptions{Include: doctorInclude, Exclude: doctorExclude})
+			if runErr != nil {
+				return runErr
+			}
+			printDoctorResult(res, jsonOutput)
+			return nil
+		},
+	}
+	doctorCmd.Flags().StringSliceVar(&doctorInclude, "include", nil, "provider keys to include")
+	doctorCmd.Flags().StringSliceVar(&doctorExclude, "exclude", nil, "provider keys to exclude")
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -135,7 +158,7 @@ func Run(args []string) int {
 		},
 	}
 
-	root.AddCommand(detectCmd, addCmd, listCmd, searchCmd)
+	root.AddCommand(detectCmd, addCmd, doctorCmd, listCmd, searchCmd)
 	root.SetArgs(args)
 
 	if err := root.Execute(); err != nil {
@@ -245,6 +268,64 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 	if result.FileAction != "" {
 		fmt.Printf("%s %s\n", label.Render("File:"), result.FileAction)
 	}
+	if result.PreviewOnly {
+		fmt.Printf("%s %s\n", label.Render("Preview:"), "diff-only (no file written)")
+	}
+	if result.Diff != "" {
+		fmt.Printf("%s\n%s\n", label.Render("Diff:"), result.Diff)
+	}
+}
+
+func printDoctorResult(result DoctorResult, jsonOutput bool) {
+	if jsonOutput {
+		bytes, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(bytes))
+		return
+	}
+	label := lipgloss.NewStyle().Bold(true)
+	fmt.Printf("%s %s\n", label.Render("Command:"), result.Command)
+	if len(result.DetectedProviders) > 0 {
+		fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(result.DetectedProviders))
+	}
+	if len(result.IncludedProviders) > 0 {
+		fmt.Printf("%s %s\n", label.Render("Included:"), formatProviderList(result.IncludedProviders))
+	}
+	if len(result.ExcludedProviders) > 0 {
+		fmt.Printf("%s %s\n", label.Render("Excluded:"), formatProviderList(result.ExcludedProviders))
+	}
+	fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(result.FinalProviders))
+	for _, warning := range result.UnsupportedKeyWarnings {
+		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+	}
+	for _, warning := range result.RuntimeWarnings {
+		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+	}
+	for _, warning := range result.RemoteProviderWarnings {
+		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+	}
+	for _, detection := range result.Detections {
+		if !detection.Matched && detection.Error == "" {
+			continue
+		}
+		fmt.Printf("%s %s\n", label.Render("Detection:"), formatDoctorDetection(detection))
+	}
+	fmt.Printf("%s %t\n", label.Render("Offline:"), result.Runtime.Offline)
+	fmt.Printf("%s %s\n", label.Render("Upstream:"), result.Runtime.UpstreamCommit)
+	if len(result.Runtime.RemoteProviders) > 0 {
+		fmt.Printf("%s %s\n", label.Render("Remote:"), formatProviderList(result.Runtime.RemoteProviders))
+	}
+	if len(result.Runtime.EmbeddedProviders) > 0 {
+		fmt.Printf("%s %s\n", label.Render("Embedded:"), formatProviderList(result.Runtime.EmbeddedProviders))
+	}
+	for _, entry := range result.Runtime.CacheEntries {
+		fmt.Printf("%s %s\n", label.Render("Cache:"), formatDoctorCacheEntry(entry))
+	}
+	for _, decision := range result.Runtime.Decisions {
+		fmt.Printf("%s %s\n", label.Render("Decision:"), decision)
+	}
+	for _, line := range result.Provenance {
+		fmt.Printf("%s %s\n", label.Render("Provenance:"), strings.TrimPrefix(line, "# Provenance: "))
+	}
 }
 
 func formatProviderList(providers []string) string {
@@ -273,5 +354,30 @@ func formatDetectionResult(result provider.Result) string {
 		parts = append(parts, result.Error)
 	}
 
+	return strings.Join(parts, " | ")
+}
+
+func formatDoctorDetection(result DoctorDetection) string {
+	status := "skipped"
+	if result.Matched {
+		status = "matched"
+	} else if result.Error != "" {
+		status = "error"
+	}
+	parts := []string{result.Key, result.Origin, status, result.Reason}
+	if result.Evidence != "" {
+		parts = append(parts, result.Evidence)
+	}
+	if result.Error != "" {
+		parts = append(parts, result.Error)
+	}
+	return strings.Join(parts, " | ")
+}
+
+func formatDoctorCacheEntry(entry DoctorCacheEntry) string {
+	parts := []string{entry.Provider, entry.State}
+	if entry.Detail != "" {
+		parts = append(parts, entry.Detail)
+	}
 	return strings.Join(parts, " | ")
 }
