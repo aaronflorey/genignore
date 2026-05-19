@@ -24,6 +24,23 @@ type CommandResult struct {
 	TemplateProviderCount  int                  `json:"templateProviderCount"`
 }
 
+type ResolveOptions struct {
+	Include []string
+	Exclude []string
+	Verbose bool
+}
+
+type ResolveResult struct {
+	Command                string            `json:"command"`
+	CWD                    string            `json:"cwd"`
+	DetectedProviders      []string          `json:"detectedProviders,omitempty"`
+	IncludedProviders      []string          `json:"includedProviders,omitempty"`
+	ExcludedProviders      []string          `json:"excludedProviders,omitempty"`
+	FinalProviders         []string          `json:"finalProviders"`
+	UnsupportedKeyWarnings []string          `json:"unsupportedKeyWarnings,omitempty"`
+	DetectionResults       []provider.Result `json:"detectionResults,omitempty"`
+}
+
 type TargetResult struct {
 	Path                   string               `json:"path"`
 	DetectedProviders      []string             `json:"detectedProviders,omitempty"`

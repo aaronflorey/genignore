@@ -88,6 +88,54 @@ func TestJSONDetectCommandContract(t *testing.T) {
 	}
 }
 
+func TestJSONResolveCommandContract(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{resolveResult: ResolveResult{
+			Command:                "resolve",
+			CWD:                    "/tmp/project",
+			DetectedProviders:      []string{"go", "node"},
+			IncludedProviders:      []string{"react"},
+			ExcludedProviders:      []string{"python"},
+			FinalProviders:         []string{"go", "node", "react"},
+			UnsupportedKeyWarnings: []string{"unsupported provider key: bad"},
+			DetectionResults: []provider.Result{
+				{Key: "go", Matched: true, Reason: "found go.mod", Evidence: "/tmp/project/go.mod"},
+				{Key: "node", Matched: true, Reason: "found package.json", Evidence: "/tmp/project/package.json"},
+			},
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"resolve", "--json"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+
+	var payload ResolveResult
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("invalid json output: %v", err)
+	}
+	if payload.Command != "resolve" || payload.CWD != "/tmp/project" {
+		t.Fatalf("unexpected command metadata: %+v", payload)
+	}
+	if !slices.Equal(payload.DetectedProviders, []string{"go", "node"}) {
+		t.Fatalf("unexpected detected providers: %v", payload.DetectedProviders)
+	}
+	if !slices.Equal(payload.FinalProviders, []string{"go", "node", "react"}) {
+		t.Fatalf("unexpected final providers: %v", payload.FinalProviders)
+	}
+	if len(payload.DetectionResults) != 2 || payload.DetectionResults[0].Key != "go" || payload.DetectionResults[1].Key != "node" {
+		t.Fatalf("unexpected detection results: %+v", payload.DetectionResults)
+	}
+	if strings.Contains(stdout, "Command:") {
+		t.Fatalf("json payload contains human-readable labels: %s", stdout)
+	}
+}
+
 func TestJSONDoctorCommandContract(t *testing.T) {
 	oldFactory := newCommandService
 	newCommandService = func(string, Config) commandService {

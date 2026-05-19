@@ -78,6 +78,13 @@ Run detection with machine-readable JSON output:
 genignore detect --json
 ```
 
+Resolve detected and explicitly included providers without mutating `.gitignore`:
+
+```bash
+genignore resolve
+genignore resolve --include macos --exclude windows --json
+```
+
 Explain the current detector evidence, provider resolution, cache state, and runtime decisions:
 
 ```bash
@@ -110,6 +117,10 @@ Online runs store cache metadata alongside remote catalog and template bodies, i
 Generated managed blocks now include a deterministic `# Provenance:` line that records the pinned `github/gitignore` commit and any embedded providers that contributed content.
 
 `genignore doctor` is the supported diagnostics surface for detector evidence, provider resolution, cache state, and degraded-runtime decisions. Detection entries classify repository-backed evidence separately from host-only heuristics such as runtime OS or installed-application checks.
+
+`genignore resolve` is the supported read-only automation surface for provider detection and final provider resolution. It reuses the same ordering, key validation, and include or exclude normalization as `genignore detect`, but it does not fetch templates or mutate `.gitignore`.
+
+`genignore` still supports machine-level defaults only. It does not support per-project preset files or repository-local configuration in the current product scope. Any future preset concept remains explicitly deferred to a later scoped phase.
 
 `genignore detect --diff` and `genignore add --diff` preview the exact managed-block change without writing `.gitignore`. The preview reports the same `File:` action that the eventual write path would take: `created`, `updated`, or `no-op`.
 

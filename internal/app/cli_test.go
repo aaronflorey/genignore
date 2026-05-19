@@ -16,12 +16,14 @@ import (
 )
 
 type stubCommandService struct {
-	detectResult CommandResult
-	detectErr    error
-	addResult    CommandResult
-	addErr       error
-	doctorResult DoctorResult
-	doctorErr    error
+	resolveResult ResolveResult
+	resolveErr    error
+	detectResult  CommandResult
+	detectErr     error
+	addResult     CommandResult
+	addErr        error
+	doctorResult  DoctorResult
+	doctorErr     error
 }
 
 type stubCatalogClient struct {
@@ -29,8 +31,46 @@ type stubCatalogClient struct {
 	err       error
 }
 
+func (s stubCommandService) Resolve(_ context.Context, _ ResolveOptions) (ResolveResult, error) {
+	return s.resolveResult, s.resolveErr
+}
+
 func (s stubCommandService) Detect(_ context.Context, _ DetectOptions) (CommandResult, error) {
 	return s.detectResult, s.detectErr
+}
+
+func TestResolveCommandOutputShowsReadOnlyProviders(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{resolveResult: ResolveResult{
+			Command:                "resolve",
+			DetectedProviders:      []string{"go", "node"},
+			IncludedProviders:      []string{"react"},
+			ExcludedProviders:      []string{"python"},
+			FinalProviders:         []string{"go", "node", "react"},
+			UnsupportedKeyWarnings: []string{"unsupported provider key: bad"},
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"resolve", "--include", "react", "--exclude", "python"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	for _, fragment := range []string{"Command: resolve", "Detected: go, node", "Included: react", "Excluded: python", "Final: go, node, react", "Warning: unsupported provider key: bad"} {
+		if !strings.Contains(stdout, fragment) {
+			t.Fatalf("missing %q in stdout: %s", fragment, stdout)
+		}
+	}
+	if strings.Contains(stdout, "File:") {
+		t.Fatalf("resolve output should stay read-only: %s", stdout)
+	}
+	if strings.Contains(stdout, "Detection:") {
+		t.Fatalf("resolve output should omit verbose evidence by default: %s", stdout)
+	}
 }
 
 func (s stubCommandService) Add(_ context.Context, _ AddOptions) (CommandResult, error) {

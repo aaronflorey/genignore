@@ -883,6 +883,60 @@ func TestDetectFailsBeforeTemplateFetchWhenSelectionIsEmpty(t *testing.T) {
 	}
 }
 
+func TestResolveMatchesDetectProviderResolutionWithoutMutatingFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
+	svc := &Service{
+		CWD:     dir,
+		Client:  client,
+		Config:  Config{Defaults: ConfigDefaults{Providers: []string{"macos"}}},
+		Manager: gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{
+			"node": matchedDetector("node"),
+			"go":   matchedDetector("go"),
+		},
+	}
+
+	resolved, err := svc.Resolve(context.Background(), ResolveOptions{Exclude: []string{"go"}})
+	if err != nil {
+		t.Fatalf("resolve failed: %v", err)
+	}
+	if len(client.requests) != 0 {
+		t.Fatalf("resolve should not fetch templates, got %v", client.requests)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".gitignore")); !os.IsNotExist(statErr) {
+		t.Fatalf("resolve should not write .gitignore, stat err=%v", statErr)
+	}
+
+	detected, err := svc.Detect(context.Background(), DetectOptions{Exclude: []string{"go"}, DryRun: true})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(resolved.DetectedProviders, detected.DetectedProviders) {
+		t.Fatalf("detected providers drifted: resolve=%v detect=%v", resolved.DetectedProviders, detected.DetectedProviders)
+	}
+	if !reflect.DeepEqual(resolved.IncludedProviders, detected.IncludedProviders) {
+		t.Fatalf("included providers drifted: resolve=%v detect=%v", resolved.IncludedProviders, detected.IncludedProviders)
+	}
+	if !reflect.DeepEqual(resolved.ExcludedProviders, detected.ExcludedProviders) {
+		t.Fatalf("excluded providers drifted: resolve=%v detect=%v", resolved.ExcludedProviders, detected.ExcludedProviders)
+	}
+	if !reflect.DeepEqual(resolved.FinalProviders, detected.FinalProviders) {
+		t.Fatalf("final providers drifted: resolve=%v detect=%v", resolved.FinalProviders, detected.FinalProviders)
+	}
+	if !reflect.DeepEqual(resolved.UnsupportedKeyWarnings, detected.UnsupportedKeyWarnings) {
+		t.Fatalf("warnings drifted: resolve=%v detect=%v", resolved.UnsupportedKeyWarnings, detected.UnsupportedKeyWarnings)
+	}
+	if !reflect.DeepEqual(resolved.DetectionResults, detected.DetectionResults) {
+		t.Fatalf("detection results drifted: resolve=%+v detect=%+v", resolved.DetectionResults, detected.DetectionResults)
+	}
+	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"macos", "node"}) {
+		t.Fatalf("detect should fetch the resolved providers once, got %v", client.requests)
+	}
+}
+
 func TestDetectReturnsDetectionResultsSortedByProviderKey(t *testing.T) {
 	t.Parallel()
 

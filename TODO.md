@@ -8,7 +8,7 @@
 - [x] `16-01` Pin upstream template sourcing by commit SHA and tighten cache freshness, integrity, and conditional fetch behavior.
 - [x] `16-02` Add explain or doctor visibility, managed-block provenance, and a real diff-before-write flow.
 - [x] `16-03` Build a real-repository fixture corpus and add machine-readable output-stability contract tests.
-- [ ] `16-04` Separate detection and provider resolution from file mutation for scripting and document the narrow deferred preset boundary.
+- [x] `16-04` Separate detection and provider resolution from file mutation for scripting and document the narrow deferred preset boundary.
 
 ## Execution Order
 

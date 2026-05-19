@@ -15,6 +15,7 @@ import (
 )
 
 type commandService interface {
+	Resolve(ctx context.Context, opts ResolveOptions) (ResolveResult, error)
 	Detect(ctx context.Context, opts DetectOptions) (CommandResult, error)
 	Add(ctx context.Context, opts AddOptions) (CommandResult, error)
 	Doctor(ctx context.Context, opts DoctorOptions) (DoctorResult, error)
@@ -61,6 +62,25 @@ func Run(args []string) int {
 	var include, exclude []string
 	var dryRun bool
 	var diff bool
+	resolveCmd := &cobra.Command{
+		Use:   "resolve",
+		Short: "Resolve providers without mutating .gitignore",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			res, runErr := service.Resolve(context.Background(), ResolveOptions{
+				Include: include,
+				Exclude: exclude,
+				Verbose: verbose,
+			})
+			if runErr != nil {
+				return runErr
+			}
+			printResolveResult(res, jsonOutput, verbose)
+			return nil
+		},
+	}
+	resolveCmd.Flags().StringSliceVar(&include, "include", nil, "provider keys to include")
+	resolveCmd.Flags().StringSliceVar(&exclude, "exclude", nil, "provider keys to exclude")
+
 	detectCmd := &cobra.Command{
 		Use:   "detect",
 		Short: "Detect providers and rebuild managed block",
@@ -158,7 +178,7 @@ func Run(args []string) int {
 		},
 	}
 
-	root.AddCommand(detectCmd, addCmd, doctorCmd, listCmd, searchCmd)
+	root.AddCommand(resolveCmd, detectCmd, addCmd, doctorCmd, listCmd, searchCmd)
 	root.SetArgs(args)
 
 	if err := root.Execute(); err != nil {
@@ -188,6 +208,37 @@ func printCatalogResult(result CatalogResult, jsonOutput bool) {
 	fmt.Printf("%s\n", label.Render("Providers:"))
 	for _, key := range result.Providers {
 		fmt.Println(key)
+	}
+}
+
+func printResolveResult(result ResolveResult, jsonOutput bool, verbose bool) {
+	if jsonOutput {
+		bytes, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(bytes))
+		return
+	}
+	label := lipgloss.NewStyle().Bold(true)
+	fmt.Printf("%s %s\n", label.Render("Command:"), result.Command)
+	if len(result.DetectedProviders) > 0 {
+		fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(result.DetectedProviders))
+	}
+	if len(result.IncludedProviders) > 0 {
+		fmt.Printf("%s %s\n", label.Render("Included:"), formatProviderList(result.IncludedProviders))
+	}
+	if len(result.ExcludedProviders) > 0 {
+		fmt.Printf("%s %s\n", label.Render("Excluded:"), formatProviderList(result.ExcludedProviders))
+	}
+	fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(result.FinalProviders))
+	for _, warning := range result.UnsupportedKeyWarnings {
+		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+	}
+	if verbose {
+		for _, detection := range result.DetectionResults {
+			if !detection.Matched && detection.Error == "" {
+				continue
+			}
+			fmt.Printf("%s %s\n", label.Render("Detection:"), formatDetectionResult(detection))
+		}
 	}
 }
 

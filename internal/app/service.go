@@ -33,6 +33,15 @@ type namedDetector struct {
 	detector provider.Detector
 }
 
+type resolvedSelection struct {
+	DetectedProviders      []string
+	IncludedProviders      []string
+	ExcludedProviders      []string
+	FinalProviders         []string
+	UnsupportedKeyWarnings []string
+	DetectionResults       []provider.Result
+}
+
 type DetectOptions struct {
 	Include []string
 	Exclude []string
@@ -58,18 +67,37 @@ func NewService(cwd string, cfg Config) *Service {
 	}
 }
 
-func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult, error) {
-	includeInput := opts.Include
-	if len(includeInput) == 0 {
-		includeInput = s.Config.Defaults.Providers
+func (s *Service) Resolve(ctx context.Context, opts ResolveOptions) (ResolveResult, error) {
+	selection, err := s.resolveSelection(ctx, opts.Include, opts.Exclude)
+	if err != nil {
+		return ResolveResult{}, err
 	}
 
-	include, includeWarnings := sanitizeKeys(includeInput)
-	exclude, excludeWarnings := sanitizeKeys(opts.Exclude)
-	warnings := append(includeWarnings, excludeWarnings...)
+	return ResolveResult{
+		Command:                "resolve",
+		CWD:                    s.CWD,
+		DetectedProviders:      selection.DetectedProviders,
+		IncludedProviders:      selection.IncludedProviders,
+		ExcludedProviders:      selection.ExcludedProviders,
+		FinalProviders:         selection.FinalProviders,
+		UnsupportedKeyWarnings: selection.UnsupportedKeyWarnings,
+		DetectionResults:       selection.DetectionResults,
+	}, nil
+}
 
-	targetResult, err := s.detectTarget(ctx, s.CWD, s.Manager, include, exclude, opts.DryRun, opts.Diff)
+func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult, error) {
+	selection, err := s.resolveSelection(ctx, opts.Include, opts.Exclude)
 	previewOnly := opts.Diff
+	if err != nil {
+		return CommandResult{}, err
+	}
+
+	template, err := s.Client.FetchTemplate(ctx, selection.FinalProviders)
+	if err != nil {
+		return CommandResult{}, err
+	}
+	block := gitignore.BuildManagedBlockWithMetadata(selection.FinalProviders, managedBlockMetadata(selection.FinalProviders, s.Config.Runtime.UpstreamCommit), template.Content, s.Config.Defaults.IgnoreRules)
+	action, diff, err := applyManagedBlock(s.Manager, block, opts.DryRun, opts.Diff)
 	if err != nil {
 		return CommandResult{}, err
 	}
@@ -77,57 +105,47 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 	return CommandResult{
 		Command:                "detect",
 		CWD:                    s.CWD,
-		DetectedProviders:      targetResult.DetectedProviders,
-		IncludedProviders:      include,
-		ExcludedProviders:      exclude,
-		FinalProviders:         targetResult.FinalProviders,
-		UnsupportedKeyWarnings: warnings,
-		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, targetResult.FinalProviders),
-		RemoteProviderWarnings: targetResult.RemoteProviderWarnings,
-		DetectionResults:       targetResult.DetectionResults,
-		FileAction:             targetResult.FileAction,
+		DetectedProviders:      selection.DetectedProviders,
+		IncludedProviders:      selection.IncludedProviders,
+		ExcludedProviders:      selection.ExcludedProviders,
+		FinalProviders:         selection.FinalProviders,
+		UnsupportedKeyWarnings: selection.UnsupportedKeyWarnings,
+		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, selection.FinalProviders),
+		RemoteProviderWarnings: remoteWarningsFromTemplate(template),
+		DetectionResults:       selection.DetectionResults,
+		FileAction:             action,
 		PreviewOnly:            previewOnly,
-		Diff:                   targetResult.Diff,
-		TemplateProviderCount:  targetResult.TemplateProviderCount,
+		Diff:                   diff,
+		TemplateProviderCount:  len(template.Providers),
 	}, nil
 }
 
-func (s *Service) detectTarget(ctx context.Context, targetPath string, manager *gitignore.Manager, include []string, exclude []string, dryRun bool, previewOnly bool) (TargetResult, error) {
-	targetResult, err := s.scanTarget(ctx, targetPath)
+func (s *Service) resolveSelection(ctx context.Context, includeInput []string, excludeInput []string) (resolvedSelection, error) {
+	if len(includeInput) == 0 {
+		includeInput = s.Config.Defaults.Providers
+	}
+
+	include, includeWarnings := sanitizeKeys(includeInput)
+	exclude, excludeWarnings := sanitizeKeys(excludeInput)
+	warnings := append(includeWarnings, excludeWarnings...)
+
+	targetResult, err := s.scanTarget(ctx, s.CWD)
 	if err != nil {
-		return TargetResult{}, err
+		return resolvedSelection{}, err
 	}
 
 	finalProviders, err := s.detectFinalProviders(targetResult.DetectedProviders, include, exclude)
 	if err != nil {
-		return TargetResult{}, err
+		return resolvedSelection{}, err
 	}
 
-	template, err := s.Client.FetchTemplate(ctx, finalProviders)
-	if err != nil {
-		return TargetResult{}, err
-	}
-	block := gitignore.BuildManagedBlockWithMetadata(finalProviders, managedBlockMetadata(finalProviders, s.Config.Runtime.UpstreamCommit), template.Content, s.Config.Defaults.IgnoreRules)
-	action, diff, err := applyManagedBlock(manager, block, dryRun, previewOnly)
-	if err != nil {
-		return TargetResult{}, err
-	}
-	remoteWarnings := remoteWarningsFromTemplate(template)
-
-	relPath, relErr := filepath.Rel(s.CWD, targetPath)
-	if relErr != nil {
-		relPath = targetPath
-	}
-
-	return TargetResult{
-		Path:                   relPath,
+	return resolvedSelection{
 		DetectedProviders:      targetResult.DetectedProviders,
+		IncludedProviders:      include,
+		ExcludedProviders:      exclude,
 		FinalProviders:         finalProviders,
+		UnsupportedKeyWarnings: warnings,
 		DetectionResults:       targetResult.DetectionResults,
-		RemoteProviderWarnings: remoteWarnings,
-		FileAction:             action,
-		Diff:                   diff,
-		TemplateProviderCount:  len(template.Providers),
 	}, nil
 }
 
@@ -250,37 +268,24 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 }
 
 func (s *Service) Doctor(ctx context.Context, opts DoctorOptions) (DoctorResult, error) {
-	includeInput := opts.Include
-	if len(includeInput) == 0 {
-		includeInput = s.Config.Defaults.Providers
-	}
-
-	include, includeWarnings := sanitizeKeys(includeInput)
-	exclude, excludeWarnings := sanitizeKeys(opts.Exclude)
-	warnings := append(includeWarnings, excludeWarnings...)
-
-	targetResult, err := s.scanTarget(ctx, s.CWD)
+	selection, err := s.resolveSelection(ctx, opts.Include, opts.Exclude)
 	if err != nil {
 		return DoctorResult{}, err
 	}
-	finalProviders, err := s.detectFinalProviders(targetResult.DetectedProviders, include, exclude)
-	if err != nil {
-		return DoctorResult{}, err
-	}
-	runtimeInfo := s.Client.InspectRuntime(finalProviders)
+	runtimeInfo := s.Client.InspectRuntime(selection.FinalProviders)
 
 	return DoctorResult{
 		Command:                "doctor",
 		CWD:                    s.CWD,
-		DetectedProviders:      targetResult.DetectedProviders,
-		IncludedProviders:      include,
-		ExcludedProviders:      exclude,
-		FinalProviders:         finalProviders,
-		UnsupportedKeyWarnings: warnings,
-		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, finalProviders),
-		Detections:             doctorDetections(targetResult.DetectionResults),
+		DetectedProviders:      selection.DetectedProviders,
+		IncludedProviders:      selection.IncludedProviders,
+		ExcludedProviders:      selection.ExcludedProviders,
+		FinalProviders:         selection.FinalProviders,
+		UnsupportedKeyWarnings: selection.UnsupportedKeyWarnings,
+		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, selection.FinalProviders),
+		Detections:             doctorDetections(selection.DetectionResults),
 		Runtime:                doctorRuntime(runtimeInfo),
-		Provenance:             managedBlockMetadata(finalProviders, s.Config.Runtime.UpstreamCommit),
+		Provenance:             managedBlockMetadata(selection.FinalProviders, s.Config.Runtime.UpstreamCommit),
 	}, nil
 }
 
