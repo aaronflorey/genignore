@@ -282,6 +282,33 @@ func TestDetectDefaultCommandOutputShowsNoOpFileAction(t *testing.T) {
 	}
 }
 
+func TestDetectDefaultCommandOutputOmitsDiffAfterWrite(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = func(string, Config) commandService {
+		return stubCommandService{detectResult: CommandResult{
+			Command:        "detect",
+			FinalProviders: []string{"go"},
+			FileAction:     gitignore.FileActionUpdated,
+			Diff:           "--- .gitignore\n+++ .gitignore\n@@ managed-block @@\n-# old\n+# new",
+		}}
+	}
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	exitCode, stdout, stderr := captureRunOutput(t, []string{"detect"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d", exitCode)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	if !strings.Contains(stdout, "File: updated") {
+		t.Fatalf("missing updated file action: %s", stdout)
+	}
+	if strings.Contains(stdout, "Diff:") || strings.Contains(stdout, "--- .gitignore") {
+		t.Fatalf("default detect output should not show diff after write: %s", stdout)
+	}
+}
+
 func TestDetectDiffCommandOutputShowsPreviewAndDiff(t *testing.T) {
 	oldFactory := newCommandService
 	newCommandService = func(string, Config) commandService {

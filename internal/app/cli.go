@@ -322,7 +322,7 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 	if result.PreviewOnly {
 		fmt.Printf("%s %s\n", label.Render("Preview:"), "diff-only (no file written)")
 	}
-	if result.Diff != "" {
+	if result.PreviewOnly && result.Diff != "" {
 		fmt.Printf("%s\n%s\n", label.Render("Diff:"), result.Diff)
 	}
 }
