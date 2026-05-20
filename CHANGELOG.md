@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.4.0](https://github.com/aaronflorey/genignore/compare/v1.3.0...v1.4.0) (2026-05-20)
+
+
+### Features
+
+* **api:** fetch gitignore templates from github ([e87f0a6](https://github.com/aaronflorey/genignore/commit/e87f0a6d2015b09baad349c905d2a8da2122cae2))
+* **app:** fan out detect across packages subfolders ([d76222f](https://github.com/aaronflorey/genignore/commit/d76222f4af6b01e27d69cb4549465c31659363d2))
+* **config:** Add machine-level defaults and Wrangler support ([74e9242](https://github.com/aaronflorey/genignore/commit/74e92427ec0ff50f7beceab307556b103309a440))
+* **custom-template:** Add embedded custom gitignore templates ([6b9889a](https://github.com/aaronflorey/genignore/commit/6b9889a7fe682a6a83cb8e5f51505ad73eb8cab3))
+* initial commit ([42fab5b](https://github.com/aaronflorey/genignore/commit/42fab5b3fddb9a0364de540daee20822fce77600))
+* **provider:** Detect one-level project signals ([3bf9147](https://github.com/aaronflorey/genignore/commit/3bf91470d2808be2c94bf59f17e75a6648e0b759))
+* **provider:** Skip ignored directories during detection ([ed92394](https://github.com/aaronflorey/genignore/commit/ed92394940d1f45993e01a0105193809821f54d0))
+
+
+### Fixes
+
+* **08:** close audit and detect scope gaps ([fac9ee4](https://github.com/aaronflorey/genignore/commit/fac9ee4fbe248a5f5e7b4b471c33514926342bfc))
+* **09:** allow embedded-only degraded catalog flow ([3aea8ab](https://github.com/aaronflorey/genignore/commit/3aea8abf5a6bb2208aa43612760e2d38d11ad76b))
+* **10:** reuse provider catalog snapshot ([63bf236](https://github.com/aaronflorey/genignore/commit/63bf236a3bfebac93985bf1eef6fc8bd06c37b54))
+* **11:** make managed env ownership explicit ([9af7a40](https://github.com/aaronflorey/genignore/commit/9af7a40a0d52befc0927c27a10080369734786cd))
+* **12:** report no-op gitignore reruns ([4b3fcd5](https://github.com/aaronflorey/genignore/commit/4b3fcd543adb44057bef9caac31b67477130c886))
+* **13:** validate pinned release packaging ([b33b553](https://github.com/aaronflorey/genignore/commit/b33b5535e0d4c7fa94babf623b7f3579f419a63c))
+* **14:** close remaining milestone audit blockers ([e4be78c](https://github.com/aaronflorey/genignore/commit/e4be78c83daaeb772244c457e752cdc3bc77b258))
+* **14:** remove implied env config wiring ([6032e89](https://github.com/aaronflorey/genignore/commit/6032e89acb89e2aff582f13c3c638493bcb1184a))
+* **15:** add binary coverage and stable detection ([18c6fc2](https://github.com/aaronflorey/genignore/commit/18c6fc2b15cf3dd0774ddd5c6eab5b87d80c4dee))
+* **15:** add gitignore fuzz and benchmarks ([30ea2a2](https://github.com/aaronflorey/genignore/commit/30ea2a2bd7b2563154c201fcf1a8fe7b30dccdbf))
+* **15:** add offline runtime cache support ([6aac859](https://github.com/aaronflorey/genignore/commit/6aac859174020910a4f492b702e1d2a9138333fb))
+* **15:** add release artifact smoke checks ([d9d5e31](https://github.com/aaronflorey/genignore/commit/d9d5e31dbbff8f2826d3a68a6cc72df8ca32ce0a))
+* **16:** add doctor visibility and diff preview ([a0dec19](https://github.com/aaronflorey/genignore/commit/a0dec1969d8a0ffb0de6618fe440cde175973e4c))
+* **16:** add fixture corpus and output contracts ([0a274f9](https://github.com/aaronflorey/genignore/commit/0a274f9afdcbd394f3510b796a600d4860c6146a))
+* **16:** add read-only provider resolution ([a188bc5](https://github.com/aaronflorey/genignore/commit/a188bc52fe5f726a7986bddb9a76be9400cf18e5))
+* **16:** hide detect diff after write ([81ecc39](https://github.com/aaronflorey/genignore/commit/81ecc39112f1d28a22accd1789812ca59e42dc10))
+* **16:** pin upstream cache validation ([5ba22de](https://github.com/aaronflorey/genignore/commit/5ba22dedcc738a90de7a2760e370cc032a561efa))
+* **16:** refresh provider catalog snapshot ([0418021](https://github.com/aaronflorey/genignore/commit/04180215050d84be1ef253b4e463a3a4acd9a874))
+* **runtime:** source provider catalog at runtime ([8b5a498](https://github.com/aaronflorey/genignore/commit/8b5a4982ab505204c4970b563e9387b33fd2179f))
+
 ## [1.3.0](https://github.com/aaronflorey/genignore/compare/v1.2.0...v1.3.0) (2026-04-13)
 
 
