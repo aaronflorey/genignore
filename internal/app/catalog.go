@@ -51,15 +51,6 @@ func supportedProviders(ctx context.Context, client providerCatalog) ([]string, 
 	return slices.Compact(providers), nil
 }
 
-func supportedProviderSet(ctx context.Context, client providerCatalog) (map[string]struct{}, error) {
-	providers, err := supportedProviders(ctx, client)
-	if err != nil {
-		return nil, err
-	}
-
-	return makeSet(providers), nil
-}
-
 func runtimeInitError() error {
 	if err := customtemplate.InitError(); err != nil {
 		return fmt.Errorf("initialize embedded templates: %w", err)

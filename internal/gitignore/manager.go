@@ -349,24 +349,6 @@ func isRuleLine(line string) bool {
 	return trimmed != "" && !strings.HasPrefix(trimmed, "#")
 }
 
-func isUnrootedLiteralBasename(pattern string) bool {
-	if pattern == "" || strings.HasPrefix(pattern, "/") || strings.Contains(pattern, "/") {
-		return false
-	}
-	return !hasSpecialGlobChars(pattern)
-}
-
-func isUnrootedLiteralPath(pattern string) bool {
-	if pattern == "" || strings.HasPrefix(pattern, "/") || strings.HasSuffix(pattern, "/") {
-		return false
-	}
-	return !hasSpecialGlobChars(pattern)
-}
-
-func hasSpecialGlobChars(pattern string) bool {
-	return strings.ContainsAny(pattern, "*?[\\!")
-}
-
 func managedMarkerBounds(content string) (start int, end int, hasMarkers bool, malformed bool) {
 	startCount := strings.Count(content, StartMarker)
 	endCount := strings.Count(content, EndMarker)
