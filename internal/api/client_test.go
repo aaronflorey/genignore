@@ -122,6 +122,33 @@ func TestFetchTemplateReturnsStableErrorOnNonOKResponse(t *testing.T) {
 	}
 }
 
+func TestFetchTemplateReturnsRateLimitHintOn403(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`))
+		case "/templates/Node.gitignore":
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.WriteHeader(http.StatusForbidden)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.listURL = server.URL + "/catalog"
+	client.templateURL = server.URL + "/templates/"
+
+	_, err := client.FetchTemplate(context.Background(), []string{"node"})
+	want := "template API returned status 403; GitHub API rate limit exceeded — set GITHUB_TOKEN to increase limits"
+	if err == nil || err.Error() != want {
+		t.Fatalf("unexpected error:\ngot:  %v\nwant: %s", err, want)
+	}
+}
+
 func TestFetchTemplateOfflineUsesCachedRemoteTemplate(t *testing.T) {
 	t.Parallel()
 
@@ -502,5 +529,74 @@ func writeCachedFixture(t *testing.T, bodyPath string, metadataPath string, upst
 	}
 	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
 		t.Fatalf("write cache metadata: %v", err)
+	}
+}
+
+func TestResolveGitHubTokenFromEnv(t *testing.T) {
+	orig := ghAuthTokenFunc
+	ghAuthTokenFunc = func() string { return "" }
+	t.Cleanup(func() { ghAuthTokenFunc = orig })
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_PAT", "")
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_API_TOKEN", "")
+	t.Setenv("GITHUB_ACCESS_TOKEN", "")
+
+	t.Run("first available wins", func(t *testing.T) {
+		t.Setenv("GITHUB_PAT", "pat-abc")
+		t.Setenv("GH_TOKEN", "gh-xyz")
+		got := resolveGitHubToken()
+		if got != "pat-abc" {
+			t.Fatalf("got %q, want pat-abc", got)
+		}
+	})
+
+	t.Run("falls through to GH_TOKEN", func(t *testing.T) {
+		t.Setenv("GITHUB_PAT", "")
+		t.Setenv("GH_TOKEN", "gh-xyz")
+		got := resolveGitHubToken()
+		if got != "gh-xyz" {
+			t.Fatalf("got %q, want gh-xyz", got)
+		}
+	})
+
+	t.Run("empty when nothing set", func(t *testing.T) {
+		got := resolveGitHubToken()
+		if got != "" {
+			t.Fatalf("got %q, want empty", got)
+		}
+	})
+}
+
+func TestFetchTemplateSendsAuthHeader(t *testing.T) {
+	orig := ghAuthTokenFunc
+	ghAuthTokenFunc = func() string { return "" }
+	t.Cleanup(func() { ghAuthTokenFunc = orig })
+
+	t.Setenv("GITHUB_TOKEN", "test-token-123")
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`))
+		case "/templates/Node.gitignore":
+			_, _ = w.Write([]byte("node_modules/\n"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.listURL = server.URL + "/catalog"
+	client.templateURL = server.URL + "/templates/"
+
+	if _, err := client.FetchTemplate(context.Background(), []string{"node"}); err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if gotAuth != "Bearer test-token-123" {
+		t.Fatalf("got Authorization %q, want %q", gotAuth, "Bearer test-token-123")
 	}
 }

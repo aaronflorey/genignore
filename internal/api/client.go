@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -203,6 +204,7 @@ func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, e
 	if err != nil {
 		return nil, fmt.Errorf("build list request: %w", err)
 	}
+	setAuthHeader(req)
 	if cacheErr == nil && cachedCatalog.Metadata.ETag != "" {
 		req.Header.Set("If-None-Match", cachedCatalog.Metadata.ETag)
 	}
@@ -231,7 +233,7 @@ func (c *Client) fetchProviderCatalog(ctx context.Context) (map[string]string, e
 		return catalog, nil
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, fmt.Errorf("list API returned status %d", res.StatusCode)
+		return nil, fmt.Errorf("list API returned status %d%s", res.StatusCode, rateLimitHint(res))
 	}
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -258,6 +260,7 @@ func (c *Client) fetchTemplatePart(ctx context.Context, key string, templatePath
 	if err != nil {
 		return "", fmt.Errorf("build template request: %w", err)
 	}
+	setAuthHeader(req)
 	if cacheErr == nil && cachedTemplate.Metadata.ETag != "" {
 		req.Header.Set("If-None-Match", cachedTemplate.Metadata.ETag)
 	}
@@ -278,7 +281,7 @@ func (c *Client) fetchTemplatePart(ctx context.Context, key string, templatePath
 		return strings.Trim(string(cachedTemplate.Body), "\n"), nil
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return "", fmt.Errorf("template API returned status %d", res.StatusCode)
+		return "", fmt.Errorf("template API returned status %d%s", res.StatusCode, rateLimitHint(res))
 	}
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -539,4 +542,51 @@ func cloneCatalog(catalog map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func rateLimitHint(res *http.Response) string {
+	if res.Header.Get("X-RateLimit-Remaining") == "0" {
+		return "; GitHub API rate limit exceeded — set GITHUB_TOKEN to increase limits"
+	}
+	if res.StatusCode == http.StatusForbidden {
+		return "; set GITHUB_TOKEN if this is a rate-limit or permissions error"
+	}
+	return ""
+}
+
+var githubTokenEnvVars = []string{
+	"GITHUB_TOKEN",
+	"GITHUB_PAT",
+	"GH_TOKEN",
+	"GITHUB_API_TOKEN",
+	"GITHUB_ACCESS_TOKEN",
+}
+
+var ghAuthTokenFunc = ghAuthToken
+
+func resolveGitHubToken() string {
+	for _, env := range githubTokenEnvVars {
+		if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+			return tok
+		}
+	}
+	return ghAuthTokenFunc()
+}
+
+func ghAuthToken() string {
+	path, err := exec.LookPath("gh")
+	if err != nil {
+		return ""
+	}
+	out, err := exec.Command(path, "auth", "token").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func setAuthHeader(req *http.Request) {
+	if tok := resolveGitHubToken(); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
 }
