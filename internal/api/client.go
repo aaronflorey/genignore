@@ -574,11 +574,11 @@ func resolveGitHubToken() string {
 }
 
 func ghAuthToken() string {
-	path, err := exec.LookPath("gh")
+	ghBin, err := exec.LookPath("gh")
 	if err != nil {
 		return ""
 	}
-	out, err := exec.Command(path, "auth", "token").Output()
+	out, err := exec.Command(ghBin, "auth", "token").Output()
 	if err != nil {
 		return ""
 	}

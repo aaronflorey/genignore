@@ -10,7 +10,6 @@ import (
 
 	"github.com/aaronflorey/genignore/internal/api"
 	"github.com/aaronflorey/genignore/internal/provider"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -200,12 +199,11 @@ func printCatalogResult(result CatalogResult, jsonOutput bool) {
 		fmt.Println(string(bytes))
 		return
 	}
-	label := lipgloss.NewStyle().Bold(true)
-	fmt.Printf("%s %s\n", label.Render("Command:"), result.Command)
+	fmt.Printf("%s %s\n", "Command:", result.Command)
 	if result.Query != "" {
-		fmt.Printf("%s %s\n", label.Render("Query:"), result.Query)
+		fmt.Printf("%s %s\n", "Query:", result.Query)
 	}
-	fmt.Printf("%s\n", label.Render("Providers:"))
+	fmt.Printf("%s\n", "Providers:")
 	for _, key := range result.Providers {
 		fmt.Println(key)
 	}
@@ -217,27 +215,26 @@ func printResolveResult(result ResolveResult, jsonOutput bool, verbose bool) {
 		fmt.Println(string(bytes))
 		return
 	}
-	label := lipgloss.NewStyle().Bold(true)
-	fmt.Printf("%s %s\n", label.Render("Command:"), result.Command)
+	fmt.Printf("%s %s\n", "Command:", result.Command)
 	if len(result.DetectedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(result.DetectedProviders))
+		fmt.Printf("%s %s\n", "Detected:", formatProviderList(result.DetectedProviders))
 	}
 	if len(result.IncludedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Included:"), formatProviderList(result.IncludedProviders))
+		fmt.Printf("%s %s\n", "Included:", formatProviderList(result.IncludedProviders))
 	}
 	if len(result.ExcludedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Excluded:"), formatProviderList(result.ExcludedProviders))
+		fmt.Printf("%s %s\n", "Excluded:", formatProviderList(result.ExcludedProviders))
 	}
-	fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(result.FinalProviders))
+	fmt.Printf("%s %s\n", "Final:", formatProviderList(result.FinalProviders))
 	for _, warning := range result.UnsupportedKeyWarnings {
-		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
 	if verbose {
 		for _, detection := range result.DetectionResults {
 			if !detection.Matched && detection.Error == "" {
 				continue
 			}
-			fmt.Printf("%s %s\n", label.Render("Detection:"), formatDetectionResult(detection))
+			fmt.Printf("%s %s\n", "Detection:", formatDetectionResult(detection))
 		}
 	}
 }
@@ -248,82 +245,81 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 		fmt.Println(string(bytes))
 		return
 	}
-	label := lipgloss.NewStyle().Bold(true)
-	fmt.Printf("%s %s\n", label.Render("Command:"), result.Command)
+	fmt.Printf("%s %s\n", "Command:", result.Command)
 	if len(result.Targets) > 0 {
 		for _, target := range result.Targets {
-			fmt.Printf("%s %s\n", label.Render("Target:"), target.Path)
+			fmt.Printf("%s %s\n", "Target:", target.Path)
 			if len(target.DetectedProviders) > 0 {
-				fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(target.DetectedProviders))
+				fmt.Printf("%s %s\n", "Detected:", formatProviderList(target.DetectedProviders))
 			}
 			if len(target.FinalProviders) > 0 {
-				fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(target.FinalProviders))
+				fmt.Printf("%s %s\n", "Final:", formatProviderList(target.FinalProviders))
 			}
 			if verbose {
 				for _, detection := range target.DetectionResults {
 					if !detection.Matched && detection.Error == "" {
 						continue
 					}
-					fmt.Printf("%s %s\n", label.Render("Detection:"), formatDetectionResult(detection))
+					fmt.Printf("%s %s\n", "Detection:", formatDetectionResult(detection))
 				}
 			}
 			if target.FileAction != "" {
-				fmt.Printf("%s %s\n", label.Render("File:"), target.FileAction)
+				fmt.Printf("%s %s\n", "File:", target.FileAction)
 			}
 		}
-		fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(result.FinalProviders))
+		fmt.Printf("%s %s\n", "Final:", formatProviderList(result.FinalProviders))
 		for _, warning := range result.UnsupportedKeyWarnings {
-			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+			fmt.Printf("%s %s\n", "Warning:", warning)
 		}
 		for _, warning := range result.RuntimeWarnings {
-			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+			fmt.Printf("%s %s\n", "Warning:", warning)
 		}
 		for _, warning := range result.RemoteProviderWarnings {
-			fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+			fmt.Printf("%s %s\n", "Warning:", warning)
 		}
 		if result.FileAction != "" {
-			fmt.Printf("%s %s\n", label.Render("File:"), result.FileAction)
+			fmt.Printf("%s %s\n", "File:", result.FileAction)
 		}
 		return
 	}
 	if len(result.DetectedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(result.DetectedProviders))
+		fmt.Printf("%s %s\n", "Detected:", formatProviderList(result.DetectedProviders))
 	}
 	if len(result.AddedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Added:"), formatProviderList(result.AddedProviders))
+		fmt.Printf("%s %s\n", "Added:", formatProviderList(result.AddedProviders))
 	}
 	if len(result.IncludedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Included:"), formatProviderList(result.IncludedProviders))
+		fmt.Printf("%s %s\n", "Included:", formatProviderList(result.IncludedProviders))
 	}
 	if len(result.ExcludedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Excluded:"), formatProviderList(result.ExcludedProviders))
+		fmt.Printf("%s %s\n", "Excluded:", formatProviderList(result.ExcludedProviders))
 	}
-	fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(result.FinalProviders))
+	fmt.Printf("%s %s\n", "Final:", formatProviderList(result.FinalProviders))
 	for _, warning := range result.UnsupportedKeyWarnings {
-		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
 	for _, warning := range result.RuntimeWarnings {
-		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
 	for _, warning := range result.RemoteProviderWarnings {
-		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
 	if verbose {
 		for _, detection := range result.DetectionResults {
 			if !detection.Matched && detection.Error == "" {
 				continue
 			}
-			fmt.Printf("%s %s\n", label.Render("Detection:"), formatDetectionResult(detection))
+			fmt.Printf("%s %s\n", "Detection:", formatDetectionResult(detection))
 		}
 	}
 	if result.FileAction != "" {
-		fmt.Printf("%s %s\n", label.Render("File:"), result.FileAction)
+		fmt.Printf("%s %s\n", "File:", result.FileAction)
 	}
 	if result.PreviewOnly {
-		fmt.Printf("%s %s\n", label.Render("Preview:"), "diff-only (no file written)")
+		fmt.Printf("%s %s\n", "Preview:", "diff-only (no file written)")
 	}
 	if result.PreviewOnly && result.Diff != "" {
-		fmt.Printf("%s\n%s\n", label.Render("Diff:"), result.Diff)
+		fmt.Printf("%s\n%s\n", "Diff:", result.Diff)
 	}
 }
 
@@ -333,49 +329,48 @@ func printDoctorResult(result DoctorResult, jsonOutput bool) {
 		fmt.Println(string(bytes))
 		return
 	}
-	label := lipgloss.NewStyle().Bold(true)
-	fmt.Printf("%s %s\n", label.Render("Command:"), result.Command)
+	fmt.Printf("%s %s\n", "Command:", result.Command)
 	if len(result.DetectedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Detected:"), formatProviderList(result.DetectedProviders))
+		fmt.Printf("%s %s\n", "Detected:", formatProviderList(result.DetectedProviders))
 	}
 	if len(result.IncludedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Included:"), formatProviderList(result.IncludedProviders))
+		fmt.Printf("%s %s\n", "Included:", formatProviderList(result.IncludedProviders))
 	}
 	if len(result.ExcludedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Excluded:"), formatProviderList(result.ExcludedProviders))
+		fmt.Printf("%s %s\n", "Excluded:", formatProviderList(result.ExcludedProviders))
 	}
-	fmt.Printf("%s %s\n", label.Render("Final:"), formatProviderList(result.FinalProviders))
+	fmt.Printf("%s %s\n", "Final:", formatProviderList(result.FinalProviders))
 	for _, warning := range result.UnsupportedKeyWarnings {
-		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
 	for _, warning := range result.RuntimeWarnings {
-		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
 	for _, warning := range result.RemoteProviderWarnings {
-		fmt.Printf("%s %s\n", label.Render("Warning:"), warning)
+		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
 	for _, detection := range result.Detections {
 		if !detection.Matched && detection.Error == "" {
 			continue
 		}
-		fmt.Printf("%s %s\n", label.Render("Detection:"), formatDoctorDetection(detection))
+		fmt.Printf("%s %s\n", "Detection:", formatDoctorDetection(detection))
 	}
-	fmt.Printf("%s %t\n", label.Render("Offline:"), result.Runtime.Offline)
-	fmt.Printf("%s %s\n", label.Render("Upstream:"), result.Runtime.UpstreamCommit)
+	fmt.Printf("%s %t\n", "Offline:", result.Runtime.Offline)
+	fmt.Printf("%s %s\n", "Upstream:", result.Runtime.UpstreamCommit)
 	if len(result.Runtime.RemoteProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Remote:"), formatProviderList(result.Runtime.RemoteProviders))
+		fmt.Printf("%s %s\n", "Remote:", formatProviderList(result.Runtime.RemoteProviders))
 	}
 	if len(result.Runtime.EmbeddedProviders) > 0 {
-		fmt.Printf("%s %s\n", label.Render("Embedded:"), formatProviderList(result.Runtime.EmbeddedProviders))
+		fmt.Printf("%s %s\n", "Embedded:", formatProviderList(result.Runtime.EmbeddedProviders))
 	}
 	for _, entry := range result.Runtime.CacheEntries {
-		fmt.Printf("%s %s\n", label.Render("Cache:"), formatDoctorCacheEntry(entry))
+		fmt.Printf("%s %s\n", "Cache:", formatDoctorCacheEntry(entry))
 	}
 	for _, decision := range result.Runtime.Decisions {
-		fmt.Printf("%s %s\n", label.Render("Decision:"), decision)
+		fmt.Printf("%s %s\n", "Decision:", decision)
 	}
 	for _, line := range result.Provenance {
-		fmt.Printf("%s %s\n", label.Render("Provenance:"), strings.TrimPrefix(line, "# Provenance: "))
+		fmt.Printf("%s %s\n", "Provenance:", strings.TrimPrefix(line, "# Provenance: "))
 	}
 }
 

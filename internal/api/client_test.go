@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -71,7 +71,7 @@ func TestClientUsesFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AvailableProviders second call failed: %v", err)
 	}
-	if !reflect.DeepEqual(listAgain, list) {
+	if !slices.Equal(listAgain, list) {
 		t.Fatalf("expected deterministic list ordering, got %v then %v", list, listAgain)
 	}
 
@@ -92,7 +92,7 @@ func TestAvailableProvidersUsesCanonicalProviderCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AvailableProviders failed: %v", err)
 	}
-	if !reflect.DeepEqual(got, providercatalog.RemoteSupportedKeys()) {
+	if !slices.Equal(got, providercatalog.RemoteSupportedKeys()) {
 		t.Fatalf("unexpected canonical provider list")
 	}
 }
@@ -346,7 +346,7 @@ func TestFetchTemplateUsesSingleCatalogLookupForRemoteProviders(t *testing.T) {
 	if catalogRequests != 1 {
 		t.Fatalf("expected one catalog request, got %d", catalogRequests)
 	}
-	if !reflect.DeepEqual(resp.AvailableProviders, []string{"go"}) {
+	if !slices.Equal(resp.AvailableProviders, []string{"go"}) {
 		t.Fatalf("unexpected available providers: %v", resp.AvailableProviders)
 	}
 }
@@ -421,7 +421,7 @@ func TestFetchProviderCatalogReusesCachedBodyOnNotModified(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchProviderCatalog failed: %v", err)
 	}
-	if !reflect.DeepEqual(catalog, map[string]string{"node": "Node.gitignore"}) {
+	if !maps.Equal(catalog, map[string]string{"node": "Node.gitignore"}) {
 		t.Fatalf("unexpected catalog: %v", catalog)
 	}
 }
@@ -490,7 +490,7 @@ func TestFetchTemplateResolvesGlobalTemplatePathsAndPreservesRequestedOrder(t *t
 	if err != nil {
 		t.Fatalf("FetchTemplate failed: %v", err)
 	}
-	if !reflect.DeepEqual(requestPaths, []string{"/templates/Global/macOS.gitignore", "/templates/Go.gitignore"}) {
+	if !slices.Equal(requestPaths, []string{"/templates/Global/macOS.gitignore", "/templates/Go.gitignore"}) {
 		t.Fatalf("unexpected request order: %v", requestPaths)
 	}
 	if resp.Content != ".DS_Store\n\nbin/" {
