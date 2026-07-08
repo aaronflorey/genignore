@@ -42,6 +42,11 @@ func Providers() []string {
 	return append([]string(nil), providers...)
 }
 
+func HasProvider(provider string) bool {
+	_, ok := byPath[provider]
+	return ok
+}
+
 func Path(provider string) (string, error) {
 	if initErr != nil {
 		return "", initErr

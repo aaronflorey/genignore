@@ -104,7 +104,14 @@ type cacheEntry struct {
 }
 
 func (c *Client) AvailableProviders(ctx context.Context) ([]string, error) {
-	return providercatalog.RemoteSupportedKeys(), nil
+	if c.upstreamCommit == DefaultUpstreamCommit {
+		return providercatalog.RemoteSupportedKeys(), nil
+	}
+	catalog, err := c.fetchProviderCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return sortedCatalogProviders(catalog), nil
 }
 
 func (c *Client) InspectRuntime(providers []string) RuntimeDiagnostics {

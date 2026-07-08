@@ -1,0 +1,80 @@
+{
+  "$schema": "./rules.schema.json",
+  "providers": [
+    {
+      "provider": "composer",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "composer.json"
+        }
+      ]
+    },
+    {
+      "provider": "go",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "go.mod"
+        }
+      ]
+    },
+    {
+      "provider": "jetbrains",
+      "match": [
+        {
+          "type": "file_path",
+          "path": ".idea"
+        },
+        {
+          "type": "file_path",
+          "path": "*.iml"
+        }
+      ]
+    },
+    {
+      "provider": "laravel",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "artisan"
+        },
+        {
+          "type": "file_content_line",
+          "path": "composer.json",
+          "contains": "laravel/framework"
+        }
+      ]
+    },
+    {
+      "provider": "node",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "package.json"
+        },
+        {
+          "type": "file_path",
+          "path": "bun.lock"
+        },
+        {
+          "type": "file_path",
+          "path": "bun.lockb"
+        }
+      ]
+    },
+    {
+      "provider": "visualstudiocode",
+      "match": [
+        {
+          "type": "file_path",
+          "path": ".vscode"
+        },
+        {
+          "type": "file_path",
+          "path": "*.code-workspace"
+        }
+      ]
+    }
+  ]
+}

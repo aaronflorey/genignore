@@ -106,6 +106,52 @@ func TestAvailableProvidersUsesCanonicalProviderCatalog(t *testing.T) {
 	}
 }
 
+func TestAvailableProvidersUsesConfiguredUpstreamCommitCatalog(t *testing.T) {
+	t.Parallel()
+
+	const upstreamCommit = "1234567890abcdef1234567890abcdef12345678"
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.URL.Path != "/repos/github/gitignore/git/trees/"+upstreamCommit {
+			w.WriteHeader(http.StatusNotFound)
+			t.Fatalf("unexpected catalog path: %q", r.URL.Path)
+		}
+		if r.URL.RawQuery != "recursive=1" {
+			w.WriteHeader(http.StatusBadRequest)
+			t.Fatalf("unexpected catalog query: %q", r.URL.RawQuery)
+		}
+		_, _ = w.Write([]byte(`{"tree":[{"path":"AL.gitignore","type":"blob"},{"path":"community/JavaScript/Vue.gitignore","type":"blob"},{"path":"Global/AL.gitignore","type":"blob"}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClientWithOptions(Options{UpstreamCommit: upstreamCommit})
+	client.listURL = server.URL + "/repos/github/gitignore/git/trees/" + upstreamCommit + "?recursive=1"
+	client.cacheDir = t.TempDir()
+
+	got, err := client.AvailableProviders(context.Background())
+	if err != nil {
+		t.Fatalf("AvailableProviders failed: %v", err)
+	}
+	if !slices.Equal(got, []string{"al", "global/al", "javascript/vue"}) {
+		t.Fatalf("unexpected configured provider list: %v", got)
+	}
+	if requests != 1 {
+		t.Fatalf("expected one catalog request, got %d", requests)
+	}
+
+	gotAgain, err := client.AvailableProviders(context.Background())
+	if err != nil {
+		t.Fatalf("AvailableProviders second call failed: %v", err)
+	}
+	if !slices.Equal(gotAgain, got) {
+		t.Fatalf("expected deterministic list ordering, got %v then %v", got, gotAgain)
+	}
+	if requests != 1 {
+		t.Fatalf("expected cached catalog reuse, got %d requests", requests)
+	}
+}
+
 func TestFetchTemplateReturnsStableErrorOnNonOKResponse(t *testing.T) {
 	t.Parallel()
 

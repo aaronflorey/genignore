@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genignore.dev/schemas/rules.schema.json",
+  "title": "genignore rule catalog",
+  "description": "Minimal schema for genignore provider detection rules.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["providers"],
+  "properties": {
+    "providers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/provider_entry"
+      }
+    }
+  },
+  "$defs": {
+    "provider_key": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[a-z0-9._-]*[a-z0-9]+)?(?:/[a-z0-9]+(?:[a-z0-9._-]*[a-z0-9]+)?)*$",
+      "description": "genignore provider key."
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+",
+      "description": "Project-relative path or glob fragment."
+    },
+    "provider_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "match"],
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/provider_key"
+        },
+        "match": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/match_rule"
+          }
+        }
+      }
+    },
+    "match_rule": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/file_path_rule"
+        },
+        {
+          "$ref": "#/$defs/file_content_line_rule"
+        }
+      ]
+    },
+    "file_path_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "path"],
+      "properties": {
+        "type": {
+          "const": "file_path"
+        },
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        }
+      }
+    },
+    "file_content_line_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "path", "contains"],
+      "properties": {
+        "type": {
+          "const": "file_content_line"
+        },
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "contains": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Literal content that must appear on a line in the target file."
+        }
+      }
+    }
+  }
+}
