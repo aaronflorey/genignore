@@ -1,5 +1,9 @@
-<!-- generated-by: gsd-doc-writer -->
 # genignore
+
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/aaronflorey/genignore/actions/workflows/ci.yml/badge.svg)](https://github.com/aaronflorey/genignore/actions/workflows/ci.yml)
+[![Release](https://github.com/aaronflorey/genignore/actions/workflows/release.yaml/badge.svg)](https://github.com/aaronflorey/genignore/actions/workflows/release.yaml)
+[![Latest Release](https://img.shields.io/github/v/release/aaronflorey/genignore?sort=semver)](https://github.com/aaronflorey/genignore/releases/latest)
 
 `genignore` is a Go CLI for developers who want deterministic `.gitignore` generation while preserving manual rules outside a managed marker block.
 
@@ -9,7 +13,6 @@
 go install github.com/aaronflorey/genignore@latest
 ```
 
-<!-- VERIFY: Homebrew installation is available once the tap repository is published. -->
 If you use Homebrew:
 
 ```bash
@@ -118,49 +121,18 @@ Default editor detection is intentionally repo-backed: `visualstudiocode` is det
 
 ## Development
 
-Curated real-repository fixtures live under `testdata/repos/`, and checked-in output contracts live under `testdata/contracts/`. Keep both small, secret-free, and easy to review.
+For local setup, build, test, lint, and release-verification commands, see [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
-When updating fixture-backed contracts intentionally:
-
-1. Reduce the fixture to only the files that affect detector or managed-output behavior.
-2. Review the resulting `testdata/contracts/*` diff for provider ordering, provenance, and formatting churn.
-3. Run `go test ./internal/provider ./internal/gitignore ./internal/app` before accepting the contract update.
-
-Run the managed-block regression tests:
+Quick reference:
 
 ```bash
-go test ./internal/gitignore
+go build ./...          # compile all packages
+go test ./...           # run all tests
+go run . detect --dry-run  # smoke test without writing .gitignore
 ```
 
-Run the managed-block rewrite benchmarks intentionally:
-
-```bash
-go test -run '^$' -bench . ./internal/gitignore
-```
-
-Run the managed-block fuzz targets intentionally:
-
-```bash
-go test -run '^$' -fuzz=FuzzParseManagedProvidersRoundTrip -fuzztime=10s ./internal/gitignore
-go test -run '^$' -fuzz=FuzzMergeManagedBlock -fuzztime=10s ./internal/gitignore
-```
-
-## Release maintenance
-
-CI validates release packaging with GoReleaser `v2.15.2` by building snapshot archives and unpacking the Linux amd64 tarball before running the packaged `genignore` binary.
-
-When refreshing the toolchain or release dependencies, keep that work isolated from feature changes and verify it deliberately:
-
-1. Update one pinned tool or dependency at a time, such as `go.mod`, `go.sum`, `.github/workflows/*.yml`, or `.goreleaser.yaml`.
-2. Run `go test ./...`.
-3. Run `goreleaser check`.
-4. Run `goreleaser release --snapshot --clean --skip=publish`.
-5. Unpack `dist/genignore_*_linux_amd64.tar.gz` and run `./genignore list` or `./genignore help` from the extracted artifact.
-
-Treat upstream catalog snapshot refreshes and Go or GoReleaser version bumps as narrow maintenance changes so any release regression stays reviewable.
-
-For a post-build or post-release offline sanity check, follow `docs/TESTING.md#manual-offline-release-verification` to build the binary, run `detect` in a clean temporary repo with clean HOME and cache directories, and confirm the command succeeds without network access or cache writes.
+For testing details, see [`docs/TESTING.md`](docs/TESTING.md). For architecture overview, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## License
 
-No `LICENSE` file is currently present in this repository.
+This project is licensed under the [MIT License](LICENSE).

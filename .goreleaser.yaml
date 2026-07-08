@@ -43,13 +43,20 @@ changelog:
 release:
   mode: keep-existing
 
-brews:
+homebrew_casks:
   - name: genignore
     repository:
       owner: aaronflorey
       name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
     homepage: "https://github.com/aaronflorey/genignore"
     description: "Generate and maintain safe .gitignore blocks"
+    url:
+      verified: "github.com/aaronflorey/genignore/"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/genignore"]
+          end
