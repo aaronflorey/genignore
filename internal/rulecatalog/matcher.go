@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+
+	"github.com/aaronflorey/genignore/internal/signalfile"
 )
 
 type MatchResult struct {
@@ -51,9 +53,9 @@ func MatchRuleWithResult(root fs.FS, rule Rule) (MatchResult, error) {
 		}
 		return MatchResult{Matched: true, Rule: rule, Path: matches[0]}, nil
 	case RuleTypeFileContentLine:
-		content, err := fs.ReadFile(root, rule.Path)
+		content, err := signalfile.ReadFS(root, rule.Path)
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
+			if errors.Is(err, fs.ErrNotExist) || signalfile.IsSafeSkip(err) {
 				return MatchResult{}, nil
 			}
 			return MatchResult{}, err

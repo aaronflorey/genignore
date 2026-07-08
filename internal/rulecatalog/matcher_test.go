@@ -1,9 +1,14 @@
 package rulecatalog
 
 import (
+	"errors"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
+
+	"github.com/aaronflorey/genignore/internal/signalfile"
 )
 
 func TestMatchEntryUsesORSemanticsAcrossRules(t *testing.T) {
@@ -75,6 +80,51 @@ func TestMatchRuleDoesNotCrossLineBoundariesForContentMatch(t *testing.T) {
 	}
 	if matched {
 		t.Fatal("MatchRule() = true, want false when the substring only appears across multiple lines")
+	}
+}
+
+func TestMatchRuleSkipsOversizedContentFile(t *testing.T) {
+	t.Parallel()
+
+	matched, err := MatchRule(fstest.MapFS{
+		"composer.json": &fstest.MapFile{Data: []byte("laravel/framework\n" + string(make([]byte, signalfile.MaxReadBytes)))},
+	}, Rule{Type: RuleTypeFileContentLine, Path: "composer.json", Contains: "laravel/framework"})
+	if err != nil {
+		t.Fatalf("MatchRule() error = %v", err)
+	}
+	if matched {
+		t.Fatal("MatchRule() = true, want false for oversized content files")
+	}
+}
+
+func TestMatchRuleSkipsSymlinkedContentFile(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	outsideDir := t.TempDir()
+	target := filepath.Join(outsideDir, "composer.json")
+	if err := os.WriteFile(target, []byte("laravel/framework\n"), 0o644); err != nil {
+		t.Fatalf("write target composer.json: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(rootDir, "composer.json")); err != nil {
+		if errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		t.Fatalf("symlink composer.json: %v", err)
+	}
+
+	root, err := signalfile.OpenRootFS(rootDir)
+	if err != nil {
+		t.Fatalf("OpenRootFS() error = %v", err)
+	}
+	defer root.Close()
+
+	matched, err := MatchRule(root, Rule{Type: RuleTypeFileContentLine, Path: "composer.json", Contains: "laravel/framework"})
+	if err != nil {
+		t.Fatalf("MatchRule() error = %v", err)
+	}
+	if matched {
+		t.Fatal("MatchRule() = true, want false for symlinked content files")
 	}
 }
 

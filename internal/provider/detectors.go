@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/aaronflorey/genignore/internal/rulecatalog"
+	"github.com/aaronflorey/genignore/internal/signalfile"
 	"github.com/go-git/go-billy/v5/osfs"
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
@@ -132,10 +133,17 @@ func Registry() map[string]Detector {
 func ruleEntryDetector(entry rulecatalog.Entry) Detector {
 	return DetectorFunc(func(ctx context.Context, cwd string) Result {
 		for _, dir := range searchDirsFor(ctx, cwd) {
-			root := os.DirFS(dir)
+			root, err := signalfile.OpenRootFS(dir)
+			if err != nil {
+				if os.IsPermission(err) {
+					return Result{Key: entry.Provider, Matched: false, Reason: "permission denied", Evidence: dir, Error: err.Error()}
+				}
+				return Result{Key: entry.Provider, Matched: false, Reason: "failed to inspect detection root", Evidence: dir, Error: err.Error()}
+			}
 			for _, rule := range entry.Match {
 				match, err := rulecatalog.MatchRuleWithResult(root, rule)
 				if err != nil {
+					root.Close()
 					return Result{
 						Key:      entry.Provider,
 						Matched:  false,
@@ -145,6 +153,7 @@ func ruleEntryDetector(entry rulecatalog.Entry) Detector {
 					}
 				}
 				if match.Matched {
+					root.Close()
 					return Result{
 						Key:      entry.Provider,
 						Matched:  true,
@@ -153,6 +162,7 @@ func ruleEntryDetector(entry rulecatalog.Entry) Detector {
 					}
 				}
 			}
+			root.Close()
 		}
 
 		return Result{Key: entry.Provider, Matched: false, Reason: "signal not found"}
@@ -491,11 +501,11 @@ func pathDetector(key string, binaries []string, reason string) Detector {
 func readSignalFile(ctx context.Context, key, cwd, fileName string) ([]byte, string, Result, bool) {
 	for _, dir := range searchDirsFor(ctx, cwd) {
 		path := filepath.Join(dir, fileName)
-		content, err := os.ReadFile(path)
+		content, err := signalfile.ReadOS(dir, fileName)
 		if err == nil {
 			return content, path, Result{}, true
 		}
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || signalfile.IsSafeSkip(err) {
 			continue
 		}
 		if os.IsPermission(err) {

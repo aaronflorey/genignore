@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -743,6 +745,71 @@ func TestRuleBackedRegistryDetectorsSurfacePathAndContentEvidence(t *testing.T) 
 			t.Fatalf("unexpected result: %+v", result)
 		}
 	})
+}
+
+func TestRuleBackedRegistryDetectorsSkipUnsafeContentSignals(t *testing.T) {
+	t.Parallel()
+
+	registry := Registry()
+
+	t.Run("oversized laravel composer file", func(t *testing.T) {
+		dir := t.TempDir()
+		composerPath := filepath.Join(dir, "composer.json")
+		content := append([]byte("{\n  \"require\": {\n    \"laravel/framework\": \"^11.0\"\n  }\n}\n"), make([]byte, 1<<20)...)
+		if err := os.WriteFile(composerPath, content, 0o644); err != nil {
+			t.Fatalf("write composer.json: %v", err)
+		}
+
+		result := registry["laravel"].Detect(context.Background(), dir)
+		expected := Result{Key: "laravel", Matched: false, Reason: "signal not found"}
+		if result != expected {
+			t.Fatalf("unexpected result: %+v", result)
+		}
+	})
+
+	t.Run("symlinked outside composer file", func(t *testing.T) {
+		dir := t.TempDir()
+		outsideDir := t.TempDir()
+		target := filepath.Join(outsideDir, "composer.json")
+		if err := os.WriteFile(target, []byte("{\n  \"require\": {\n    \"laravel/framework\": \"^11.0\"\n  }\n}\n"), 0o644); err != nil {
+			t.Fatalf("write target composer.json: %v", err)
+		}
+		if err := os.Symlink(target, filepath.Join(dir, "composer.json")); err != nil {
+			if errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) {
+				t.Skipf("symlink unavailable: %v", err)
+			}
+			t.Fatalf("symlink composer.json: %v", err)
+		}
+
+		result := registry["laravel"].Detect(context.Background(), dir)
+		expected := Result{Key: "laravel", Matched: false, Reason: "signal not found"}
+		if result != expected {
+			t.Fatalf("unexpected result: %+v", result)
+		}
+	})
+}
+
+func TestProviderBackedDetectorsSkipSymlinkedOutsideContentSignals(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	outsideDir := t.TempDir()
+	target := filepath.Join(outsideDir, "package.json")
+	if err := os.WriteFile(target, []byte(`{"dependencies":{"react":"^19.0.0"}}`), 0o644); err != nil {
+		t.Fatalf("write target package.json: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "package.json")); err != nil {
+		if errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		t.Fatalf("symlink package.json: %v", err)
+	}
+
+	result := reactDetector().Detect(context.Background(), dir)
+	expected := Result{Key: "react", Matched: false, Reason: "signal not found"}
+	if result != expected {
+		t.Fatalf("unexpected result: %+v", result)
+	}
 }
 
 func TestNodeDetectorDoesNotMatchDeeperThanOneLevel(t *testing.T) {

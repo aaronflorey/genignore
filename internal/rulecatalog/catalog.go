@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -164,8 +165,8 @@ func validateProvider(provider string) error {
 }
 
 func normalizeRule(rawRule rawRule) (Rule, error) {
-	if strings.TrimSpace(rawRule.Path) == "" {
-		return Rule{}, fmt.Errorf("path must not be empty")
+	if err := validateRulePath(rawRule.Path); err != nil {
+		return Rule{}, err
 	}
 
 	switch RuleType(rawRule.Type) {
@@ -185,6 +186,35 @@ func normalizeRule(rawRule rawRule) (Rule, error) {
 		}
 		return Rule{}, fmt.Errorf("unsupported rule type %q", rawRule.Type)
 	}
+}
+
+func validateRulePath(rulePath string) error {
+	if strings.TrimSpace(rulePath) == "" {
+		return fmt.Errorf("path must not be empty")
+	}
+
+	normalized := strings.ReplaceAll(rulePath, `\`, "/")
+	cleaned := filepath.Clean(normalized)
+
+	if strings.HasPrefix(normalized, "/") || strings.HasPrefix(normalized, `//`) || filepath.IsAbs(normalized) || filepath.IsAbs(cleaned) {
+		return fmt.Errorf("path must be project-relative")
+	}
+	if volume := filepath.VolumeName(rulePath); volume != "" {
+		return fmt.Errorf("path must be project-relative")
+	}
+	if len(normalized) >= 2 && normalized[1] == ':' {
+		return fmt.Errorf("path must be project-relative")
+	}
+
+	for _, candidate := range []string{normalized, cleaned} {
+		for _, component := range strings.Split(candidate, "/") {
+			if component == ".." {
+				return fmt.Errorf("path must not contain parent traversal")
+			}
+		}
+	}
+
+	return nil
 }
 
 func compareEntry(a, b Entry) int {

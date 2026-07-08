@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/aaronflorey/genignore/internal/customtemplate"
+	"github.com/aaronflorey/genignore/internal/templatecatalog"
 )
 
 type schemaDocument struct {
@@ -87,15 +90,7 @@ func TestLoadEmbeddedCatalog(t *testing.T) {
 func TestRulesSchemaDocumentsGenignoreCatalogContract(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile("rules.schema.json")
-	if err != nil {
-		t.Fatalf("ReadFile(rules.schema.json) = %v", err)
-	}
-
-	var doc schemaDocument
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("json.Unmarshal(rules.schema.json) = %v", err)
-	}
+	doc := readRulesSchemaDocument(t)
 
 	if doc.ID != "https://genignore.dev/schemas/rules.schema.json" {
 		t.Fatalf("schema $id = %q, want genignore-specific schema id", doc.ID)
@@ -181,6 +176,33 @@ func TestRulesSchemaDocumentsGenignoreCatalogContract(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(relativePath.Description), "project-relative") {
 		t.Fatalf("relative_path description = %q, want project-relative path contract", relativePath.Description)
+	}
+}
+
+func TestRulesSchemaProviderKeyPatternMatchesEverySupportedTemplateProvider(t *testing.T) {
+	t.Parallel()
+
+	doc := readRulesSchemaDocument(t)
+	providerKeyPattern, err := regexp.Compile(doc.Defs["provider_key"].Pattern)
+	if err != nil {
+		t.Fatalf("regexp.Compile(provider_key.pattern) = %v", err)
+	}
+
+	supportedKeys := append(templatecatalog.Providers(), customtemplate.ProviderKeys()...)
+	if !slices.Contains(supportedKeys, "c++") {
+		t.Fatal(`supported provider keys must include "c++"`)
+	}
+
+	for _, key := range supportedKeys {
+		if !providerKeyPattern.MatchString(key) {
+			t.Fatalf("provider_key pattern %q rejected supported provider key %q", doc.Defs["provider_key"].Pattern, key)
+		}
+	}
+
+	for _, key := range []string{"/global/al", "global//al", "global/al/"} {
+		if providerKeyPattern.MatchString(key) {
+			t.Fatalf("provider_key pattern %q unexpectedly accepted invalid provider key %q", doc.Defs["provider_key"].Pattern, key)
+		}
 	}
 }
 
@@ -401,10 +423,86 @@ func TestLoadFSRejectsEmptyFields(t *testing.T) {
 	}
 }
 
+func TestLoadFSRejectsUnsafeRulePaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		ruleType RuleType
+		path     string
+		want     string
+	}{
+		{name: "unix absolute", ruleType: RuleTypeFilePath, path: "/etc/passwd", want: `provider "go" rule 1: path must be project-relative`},
+		{name: "windows drive slash", ruleType: RuleTypeFilePath, path: "C:/Windows/System32", want: `provider "go" rule 1: path must be project-relative`},
+		{name: "windows drive backslash", ruleType: RuleTypeFileContentLine, path: `C:\Windows\System32`, want: `provider "laravel" rule 1: path must be project-relative`},
+		{name: "windows drive bare volume", ruleType: RuleTypeFilePath, path: `C:go.mod`, want: `provider "go" rule 1: path must be project-relative`},
+		{name: "unc path", ruleType: RuleTypeFileContentLine, path: `\\server\share\file`, want: `provider "laravel" rule 1: path must be project-relative`},
+		{name: "unc path slash", ruleType: RuleTypeFilePath, path: "//server/share/file", want: `provider "go" rule 1: path must be project-relative`},
+		{name: "parent only", ruleType: RuleTypeFilePath, path: "..", want: `provider "go" rule 1: path must not contain parent traversal`},
+		{name: "parent with slash", ruleType: RuleTypeFilePath, path: "../go.mod", want: `provider "go" rule 1: path must not contain parent traversal`},
+		{name: "parent with backslash", ruleType: RuleTypeFileContentLine, path: `..\composer.json`, want: `provider "laravel" rule 1: path must not contain parent traversal`},
+		{name: "trailing parent", ruleType: RuleTypeFilePath, path: "x/..", want: `provider "go" rule 1: path must not contain parent traversal`},
+		{name: "mixed separators", ruleType: RuleTypeFileContentLine, path: `x\..\composer.json`, want: `provider "laravel" rule 1: path must not contain parent traversal`},
+		{name: "mixed separators slash then backslash", ruleType: RuleTypeFilePath, path: `x/..\go.mod`, want: `provider "go" rule 1: path must not contain parent traversal`},
+		{name: "duplicate separator traversal", ruleType: RuleTypeFilePath, path: "x//../go.mod", want: `provider "go" rule 1: path must not contain parent traversal`},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := "go"
+			rule := map[string]string{"type": string(RuleTypeFilePath), "path": tt.path}
+			if tt.ruleType == RuleTypeFileContentLine {
+				provider = "laravel"
+				rule = map[string]string{"type": string(RuleTypeFileContentLine), "path": tt.path, "contains": "laravel/framework"}
+			}
+			ruleJSON, err := json.Marshal(rule)
+			if err != nil {
+				t.Fatalf("json.Marshal(rule) = %v", err)
+			}
+
+			_, loadErr := LoadFS(jsonFS(`
+{
+  "providers": [
+    {
+      "provider": "`+provider+`",
+	      "match": [`+string(ruleJSON)+`]
+    }
+  ]
+}
+`), "rules.json")
+			if loadErr == nil {
+				t.Fatal("LoadFS() expected error")
+			}
+			if !strings.Contains(loadErr.Error(), tt.want) {
+				t.Fatalf("LoadFS() error = %v, want substring %q", loadErr, tt.want)
+			}
+		})
+	}
+}
+
 func jsonFS(content string) fs.FS {
 	return fstest.MapFS{
 		"rules.json": &fstest.MapFile{Data: []byte(strings.TrimSpace(content))},
 	}
+}
+
+func readRulesSchemaDocument(t *testing.T) schemaDocument {
+	t.Helper()
+
+	raw, err := os.ReadFile("rules.schema.json")
+	if err != nil {
+		t.Fatalf("ReadFile(rules.schema.json) = %v", err)
+	}
+
+	var doc schemaDocument
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("json.Unmarshal(rules.schema.json) = %v", err)
+	}
+
+	return doc
 }
 
 func equalEntry(a, b Entry) bool {
