@@ -2,6 +2,19 @@
   "$schema": "./rules.schema.json",
   "providers": [
     {
+      "provider": "android",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "AndroidManifest.xml"
+        },
+        {
+          "type": "file_path",
+          "path": "app/src/main/AndroidManifest.xml"
+        }
+      ]
+    },
+    {
       "provider": "composer",
       "match": [
         {
@@ -11,11 +24,46 @@
       ]
     },
     {
+      "provider": "dart",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "pubspec.yaml"
+        }
+      ]
+    },
+    {
       "provider": "go",
       "match": [
         {
           "type": "file_path",
           "path": "go.mod"
+        }
+      ]
+    },
+    {
+      "provider": "java",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "build.gradle"
+        },
+        {
+          "type": "file_path",
+          "path": "build.gradle.kts"
+        },
+        {
+          "type": "file_path",
+          "path": "pom.xml"
+        }
+      ]
+    },
+    {
+      "provider": "jekyll",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "_config.yml"
         }
       ]
     },
@@ -47,6 +95,32 @@
       ]
     },
     {
+      "provider": "maven",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "pom.xml"
+        }
+      ]
+    },
+    {
+      "provider": "nextjs",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "next.config.js"
+        },
+        {
+          "type": "file_path",
+          "path": "next.config.mjs"
+        },
+        {
+          "type": "file_path",
+          "path": "next.config.ts"
+        }
+      ]
+    },
+    {
       "provider": "node",
       "match": [
         {
@@ -60,6 +134,101 @@
         {
           "type": "file_path",
           "path": "bun.lockb"
+        }
+      ]
+    },
+    {
+      "provider": "python",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "pyproject.toml"
+        },
+        {
+          "type": "file_path",
+          "path": "requirements.txt"
+        },
+        {
+          "type": "file_path",
+          "path": "setup.py"
+        }
+      ]
+    },
+    {
+      "provider": "rails",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "bin/rails"
+        },
+        {
+          "type": "file_path",
+          "path": "config/application.rb"
+        }
+      ]
+    },
+    {
+      "provider": "ruby",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "Gemfile"
+        }
+      ]
+    },
+    {
+      "provider": "rust",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "Cargo.toml"
+        }
+      ]
+    },
+    {
+      "provider": "symfony",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "bin/console"
+        },
+        {
+          "type": "file_path",
+          "path": "config/bundles.php"
+        },
+        {
+          "type": "file_path",
+          "path": "symfony.lock"
+        }
+      ]
+    },
+    {
+      "provider": "swift",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "*.swift"
+        },
+        {
+          "type": "file_path",
+          "path": "Package.swift"
+        }
+      ]
+    },
+    {
+      "provider": "terraform",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "*.tf"
+        },
+        {
+          "type": "file_path",
+          "path": "*.tfvars"
+        },
+        {
+          "type": "file_path",
+          "path": ".terraform.lock.hcl"
         }
       ]
     },

@@ -200,8 +200,8 @@ func TestReactAndLaravelDetectorsReportStructuredErrors(t *testing.T) {
 		t.Fatalf("unexpected react result: %+v", react)
 	}
 
-	laravel := laravelDetector().Detect(context.Background(), dir)
-	if laravel.Key != "laravel" || laravel.Matched || laravel.Reason != "failed to read signal file" || laravel.Evidence != composerPath || laravel.Error == "" {
+	laravel := Registry()["laravel"].Detect(context.Background(), dir)
+	if laravel.Key != "laravel" || laravel.Matched || laravel.Reason != "failed to evaluate detection rule" || laravel.Evidence != composerPath || laravel.Error == "" {
 		t.Fatalf("unexpected laravel result: %+v", laravel)
 	}
 }
@@ -711,6 +711,40 @@ func TestNodeDetectorMatchesBunLockfiles(t *testing.T) {
 	}
 }
 
+func TestRuleBackedRegistryDetectorsSurfacePathAndContentEvidence(t *testing.T) {
+	t.Parallel()
+
+	registry := Registry()
+
+	t.Run("path rule evidence", func(t *testing.T) {
+		dir := t.TempDir()
+		packagePath := filepath.Join(dir, "package.json")
+		if err := os.WriteFile(packagePath, []byte(`{"name":"demo"}`), 0o644); err != nil {
+			t.Fatalf("write package.json: %v", err)
+		}
+
+		result := registry["node"].Detect(context.Background(), dir)
+		expected := Result{Key: "node", Matched: true, Reason: "found node project file", Evidence: packagePath}
+		if result != expected {
+			t.Fatalf("unexpected result: %+v", result)
+		}
+	})
+
+	t.Run("content line rule evidence", func(t *testing.T) {
+		dir := t.TempDir()
+		composerPath := filepath.Join(dir, "composer.json")
+		if err := os.WriteFile(composerPath, []byte("{\n  \"require\": {\n    \"laravel/framework\": \"^11.0\"\n  }\n}\n"), 0o644); err != nil {
+			t.Fatalf("write composer.json: %v", err)
+		}
+
+		result := registry["laravel"].Detect(context.Background(), dir)
+		expected := Result{Key: "laravel", Matched: true, Reason: "composer.json references laravel/framework", Evidence: composerPath + ":3"}
+		if result != expected {
+			t.Fatalf("unexpected result: %+v", result)
+		}
+	})
+}
+
 func TestNodeDetectorDoesNotMatchDeeperThanOneLevel(t *testing.T) {
 	t.Parallel()
 
@@ -827,18 +861,31 @@ func TestRegistryMatchesCuratedRepositoryFixtures(t *testing.T) {
 		fixture string
 		keys    []string
 		want    []string
+		result  map[string]Result
 	}{
 		{
 			name:    "next-vscode-app",
 			fixture: "next-vscode-app",
 			keys:    []string{"jetbrains", "nextjs", "node", "react", "visualstudiocode"},
 			want:    []string{"jetbrains", "nextjs", "node", "react", "visualstudiocode"},
+			result: map[string]Result{
+				"jetbrains":        {Key: "jetbrains", Matched: true, Reason: "found JetBrains project metadata", Evidence: filepath.Join(".idea")},
+				"nextjs":           {Key: "nextjs", Matched: true, Reason: "found next config", Evidence: "next.config.js"},
+				"node":             {Key: "node", Matched: true, Reason: "found node project file", Evidence: "package.json"},
+				"react":            {Key: "react", Matched: true, Reason: "package.json dependency includes react", Evidence: "package.json"},
+				"visualstudiocode": {Key: "visualstudiocode", Matched: true, Reason: "found VS Code workspace metadata", Evidence: filepath.Join(".vscode")},
+			},
 		},
 		{
 			name:    "laravel-jetbrains-app",
 			fixture: "laravel-jetbrains-app",
 			keys:    []string{"composer", "jetbrains", "laravel"},
 			want:    []string{"composer", "jetbrains", "laravel"},
+			result: map[string]Result{
+				"composer":  {Key: "composer", Matched: true, Reason: "found composer.json", Evidence: "composer.json"},
+				"jetbrains": {Key: "jetbrains", Matched: true, Reason: "found JetBrains project metadata", Evidence: filepath.Join(".idea")},
+				"laravel":   {Key: "laravel", Matched: true, Reason: "found artisan file", Evidence: "artisan"},
+			},
 		},
 	}
 
@@ -851,6 +898,12 @@ func TestRegistryMatchesCuratedRepositoryFixtures(t *testing.T) {
 			matched := make([]string, 0, len(tt.keys))
 			for _, key := range tt.keys {
 				result := registry[key].Detect(ctx, root)
+				if expected, ok := tt.result[key]; ok {
+					expected.Evidence = filepath.Join(root, expected.Evidence)
+					if result != expected {
+						t.Fatalf("unexpected result for %s/%s: got %+v want %+v", tt.fixture, key, result, expected)
+					}
+				}
 				if result.Matched {
 					matched = append(matched, key)
 				}

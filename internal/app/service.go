@@ -61,7 +61,7 @@ func NewService(cwd string, cfg Config) *Service {
 	return &Service{
 		CWD:       cwd,
 		Config:    cfg,
-		Client:    api.NewClientWithOptions(api.Options{Offline: cfg.Runtime.Offline, UpstreamCommit: cfg.Runtime.UpstreamCommit}),
+		Client:    api.NewEmbeddedClientWithOptions(api.Options{Offline: cfg.Runtime.Offline, UpstreamCommit: cfg.Runtime.UpstreamCommit}),
 		Manager:   gitignore.NewManager(cwd),
 		Detectors: provider.Registry(),
 	}
@@ -128,6 +128,7 @@ func (s *Service) resolveSelection(ctx context.Context, includeInput []string, e
 	include, includeWarnings := sanitizeKeys(includeInput)
 	exclude, excludeWarnings := sanitizeKeys(excludeInput)
 	warnings := append(includeWarnings, excludeWarnings...)
+	slices.Sort(warnings)
 
 	targetResult, err := s.scanTarget(ctx, s.CWD)
 	if err != nil {
@@ -386,6 +387,8 @@ func managedBlockMetadata(providers []string, upstreamCommit string) []string {
 		}
 		remoteProviders = append(remoteProviders, key)
 	}
+	slices.Sort(remoteProviders)
+	slices.Sort(embeddedProviders)
 
 	parts := make([]string, 0, 2)
 	if len(remoteProviders) > 0 {
@@ -420,15 +423,29 @@ func doctorDetections(results []provider.Result) []DoctorDetection {
 }
 
 func doctorRuntime(runtimeInfo api.RuntimeDiagnostics) DoctorRuntime {
+	remoteProviders := slices.Clone(runtimeInfo.RemoteProviders)
+	embeddedProviders := slices.Clone(runtimeInfo.EmbeddedProviders)
+	slices.Sort(remoteProviders)
+	slices.Sort(embeddedProviders)
+
 	cacheEntries := make([]DoctorCacheEntry, 0, len(runtimeInfo.CacheEntries))
 	for _, entry := range runtimeInfo.CacheEntries {
 		cacheEntries = append(cacheEntries, DoctorCacheEntry{Provider: entry.Provider, State: entry.State, Detail: entry.Detail})
 	}
+	slices.SortFunc(cacheEntries, func(a, b DoctorCacheEntry) int {
+		if cmp := strings.Compare(a.Provider, b.Provider); cmp != 0 {
+			return cmp
+		}
+		if cmp := strings.Compare(a.State, b.State); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.Detail, b.Detail)
+	})
 	return DoctorRuntime{
 		UpstreamCommit:    runtimeInfo.UpstreamCommit,
 		Offline:           runtimeInfo.Offline,
-		RemoteProviders:   runtimeInfo.RemoteProviders,
-		EmbeddedProviders: runtimeInfo.EmbeddedProviders,
+		RemoteProviders:   remoteProviders,
+		EmbeddedProviders: embeddedProviders,
 		CacheEntries:      cacheEntries,
 		Decisions:         runtimeInfo.Decisions,
 	}

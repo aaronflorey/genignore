@@ -32,6 +32,35 @@ func TestGitHubBackedKeysAreSupported(t *testing.T) {
 	}
 }
 
+func TestAllSupportedKeysIncludesEmbeddedUpstreamAndCustomProviders(t *testing.T) {
+	t.Parallel()
+
+	got := AllSupportedKeys()
+	if len(got) == 0 {
+		t.Fatalf("AllSupportedKeys() returned no providers")
+	}
+	if !slices.IsSorted(got) {
+		t.Fatalf("AllSupportedKeys() not sorted: %v", got)
+	}
+	for _, key := range []string{"ai-agents", "go", "macos", "wrangler"} {
+		if !slices.Contains(got, key) {
+			t.Fatalf("AllSupportedKeys() missing %q", key)
+		}
+	}
+}
+
+func TestAllSupportedKeysReturnsCopy(t *testing.T) {
+	t.Parallel()
+
+	got := AllSupportedKeys()
+	want := append([]string(nil), got...)
+	got[0] = "mutated"
+
+	if !slices.Equal(AllSupportedKeys(), want) {
+		t.Fatalf("AllSupportedKeys() changed after caller mutation")
+	}
+}
+
 func TestRemoteSupportedKeysExcludeEmbeddedCustomProviders(t *testing.T) {
 	t.Parallel()
 

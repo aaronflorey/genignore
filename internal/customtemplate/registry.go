@@ -42,16 +42,24 @@ func HasProvider(key string) bool {
 	return ok
 }
 
-func ContentForProviders(keys []string) (string, error) {
+func Content(key string) (string, error) {
 	if initErr != nil {
 		return "", initErr
 	}
 
+	content, ok := byKey[key]
+	if !ok {
+		return "", fmt.Errorf("embedded custom template not found: %s", key)
+	}
+	return content, nil
+}
+
+func ContentForProviders(keys []string) (string, error) {
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
-		content, ok := byKey[key]
-		if !ok {
-			return "", fmt.Errorf("embedded custom template not found: %s", key)
+		content, err := Content(key)
+		if err != nil {
+			return "", err
 		}
 		if strings.TrimSpace(content) == "" {
 			continue

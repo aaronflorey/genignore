@@ -337,6 +337,43 @@ func TestFetchTemplateSupportsWranglerEmbeddedCustomProviderWithoutRemoteRequest
 	}
 }
 
+func TestEmbeddedClientUsesEmbeddedUpstreamTemplateWithoutHTTPServer(t *testing.T) {
+	t.Parallel()
+
+	client := NewEmbeddedClientWithOptions(Options{})
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"go"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if !strings.Contains(resp.Content, "go.work") {
+		t.Fatalf("unexpected embedded upstream template content: %q", resp.Content)
+	}
+	if !slices.Equal(resp.AvailableProviders, providercatalog.RemoteSupportedKeys()) {
+		t.Fatalf("unexpected available providers: %v", resp.AvailableProviders)
+	}
+}
+
+func TestEmbeddedClientPreservesRequestedProviderOrderAcrossEmbeddedSources(t *testing.T) {
+	t.Parallel()
+
+	client := NewEmbeddedClientWithOptions(Options{})
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"wrangler", "go"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if !strings.HasPrefix(resp.Content, "# Cloudflare Wrangler\n.wrangler/") {
+		t.Fatalf("expected custom template first in merged content: %q", resp.Content)
+	}
+	if !strings.Contains(resp.Content, "\n\n# If you prefer the allow list template") {
+		t.Fatalf("expected embedded upstream template after custom template: %q", resp.Content)
+	}
+	if !slices.Equal(resp.Providers, []string{"wrangler", "go"}) {
+		t.Fatalf("unexpected provider order: %v", resp.Providers)
+	}
+}
+
 func TestFetchTemplateMergesRemoteAndEmbeddedCustomTemplates(t *testing.T) {
 	t.Parallel()
 

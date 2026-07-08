@@ -15,11 +15,11 @@ type providerCatalog interface {
 }
 
 func ListProviders(ctx context.Context, client providerCatalog) ([]string, error) {
-	return supportedProviders(ctx, client)
+	return supportedProviders()
 }
 
 func SearchProviders(ctx context.Context, client providerCatalog, term string) ([]string, error) {
-	providers, err := supportedProviders(ctx, client)
+	providers, err := supportedProviders()
 	if err != nil {
 		return nil, err
 	}
@@ -35,20 +35,12 @@ func SearchProviders(ctx context.Context, client providerCatalog, term string) (
 	return filtered, nil
 }
 
-func supportedProviders(ctx context.Context, client providerCatalog) ([]string, error) {
+func supportedProviders() ([]string, error) {
 	if err := runtimeInitError(); err != nil {
 		return nil, err
 	}
 
-	remoteProviders, err := client.AvailableProviders(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	providers := append([]string(nil), remoteProviders...)
-	providers = append(providers, customtemplate.ProviderKeys()...)
-	slices.Sort(providers)
-	return slices.Compact(providers), nil
+	return provider.AllSupportedKeys(), nil
 }
 
 func runtimeInitError() error {

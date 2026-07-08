@@ -812,6 +812,47 @@ func TestBuildManagedBlockMatchesContractFixture(t *testing.T) {
 	}
 }
 
+func TestUpsertManagedBlockContractFixturePreservesUnmanagedLines(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"# user-owned rule",
+		StartMarker,
+		"# old block",
+		EndMarker,
+		".planning",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed write failed: %v", err)
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	block, err := os.ReadFile(filepath.Join(filepath.Clean(filepath.Join(wd, "..", "..")), "testdata", "contracts", "managed_block_next_vscode_app.gitignore"))
+	if err != nil {
+		t.Fatalf("read contract fixture: %v", err)
+	}
+
+	m := NewManager(dir)
+	if _, err := m.UpsertManagedBlock(string(block), false); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	want := "# user-owned rule\n" + string(block) + ".planning\n"
+	if string(content) != want {
+		t.Fatalf("expected embedded managed block to replace only managed region\nwant:\n%s\n got:\n%s", want, string(content))
+	}
+}
+
 func countExactLine(content, line string) int {
 	count := 0
 	for _, current := range strings.Split(content, "\n") {

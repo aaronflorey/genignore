@@ -28,7 +28,7 @@ func init() {
 		return
 	}
 
-	remoteSupportedKeys := providercatalog.RemoteSupportedKeys()
+	remoteSupportedKeys := providercatalog.SupportedKeys()
 	remoteSet := make(map[string]struct{}, len(remoteSupportedKeys))
 	for _, key := range remoteSupportedKeys {
 		remoteSet[key] = struct{}{}
@@ -57,8 +57,12 @@ func InitError() error {
 	return initErr
 }
 
+func AllSupportedKeys() []string {
+	return append([]string(nil), SupportedKeys...)
+}
+
 func RemoteSupportedKeys() []string {
-	return providercatalog.RemoteSupportedKeys()
+	return providercatalog.SupportedKeys()
 }
 
 func IsSupported(key string) bool {

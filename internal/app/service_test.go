@@ -475,6 +475,15 @@ func TestDetectCustomOnlySucceedsWithoutRemoteCatalog(t *testing.T) {
 	}
 }
 
+func TestNewServiceUsesEmbeddedClient(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(t.TempDir(), Config{})
+	if _, ok := svc.Client.(*api.EmbeddedClient); !ok {
+		t.Fatalf("expected NewService to use *api.EmbeddedClient, got %T", svc.Client)
+	}
+}
+
 func TestAddCustomOnlySucceedsWithoutRemoteCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -497,6 +506,50 @@ func TestAddCustomOnlySucceedsWithoutRemoteCatalog(t *testing.T) {
 	}
 	if len(res.RemoteProviderWarnings) != 0 {
 		t.Fatalf("unexpected remote warnings: %v", res.RemoteProviderWarnings)
+	}
+}
+
+func TestNewServiceDetectUsesEmbeddedUpstreamTemplatesWithoutHTTPServer(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	svc := NewService(dir, Config{})
+
+	res, err := svc.Detect(context.Background(), DetectOptions{Include: []string{"go"}})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !containsString(res.FinalProviders, "go") {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	content, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	if !strings.Contains(string(content), "go.work") {
+		t.Fatalf("expected embedded go template content in .gitignore: %q", string(content))
+	}
+}
+
+func TestNewServiceAddUsesEmbeddedUpstreamTemplatesWithoutHTTPServer(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	svc := NewService(dir, Config{})
+
+	res, err := svc.Add(context.Background(), AddOptions{Keys: []string{"go"}})
+	if err != nil {
+		t.Fatalf("add failed: %v", err)
+	}
+	if !containsString(res.FinalProviders, "go") {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	content, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	if !strings.Contains(string(content), "go.work") {
+		t.Fatalf("expected embedded go template content in .gitignore: %q", string(content))
 	}
 }
 
@@ -967,6 +1020,44 @@ func TestDetectReturnsDetectionResultsSortedByProviderKey(t *testing.T) {
 	}
 }
 
+func TestResolveUsesRuleBackedDetectorsForSelectionAndEvidence(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packagePath := filepath.Join(dir, "package.json")
+	if err := os.WriteFile(packagePath, []byte(`{"name":"demo"}`), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+	composerPath := filepath.Join(dir, "composer.json")
+	if err := os.WriteFile(composerPath, []byte("{\n  \"require\": {\n    \"laravel/framework\": \"^11.0\"\n  }\n}\n"), 0o644); err != nil {
+		t.Fatalf("write composer.json: %v", err)
+	}
+
+	svc := &Service{
+		CWD:       dir,
+		Client:    &fakeAPI{available: provider.SupportedKeys, template: "generated\n"},
+		Manager:   gitignore.NewManager(dir),
+		Detectors: fixtureDetectors("laravel", "node"),
+	}
+
+	res, err := svc.Resolve(context.Background(), ResolveOptions{})
+	if err != nil {
+		t.Fatalf("resolve failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.DetectedProviders, []string{"laravel", "node"}) {
+		t.Fatalf("unexpected detected providers: %v", res.DetectedProviders)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"laravel", "node"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	if !reflect.DeepEqual(res.DetectionResults, []provider.Result{
+		{Key: "laravel", Matched: true, Reason: "composer.json references laravel/framework", Evidence: composerPath + ":3"},
+		{Key: "node", Matched: true, Reason: "found node project file", Evidence: packagePath},
+	}) {
+		t.Fatalf("unexpected detection results: %+v", res.DetectionResults)
+	}
+}
+
 func TestDetectWritesCleanManagedBlockAndPreservesUserLines(t *testing.T) {
 	t.Parallel()
 
@@ -1012,6 +1103,54 @@ func TestDetectWritesCleanManagedBlockAndPreservesUserLines(t *testing.T) {
 	}
 	if !strings.Contains(value, "# user-owned rule") || !strings.Contains(value, ".planning") {
 		t.Fatalf("expected unmanaged user content preserved\n%s", value)
+	}
+}
+
+func TestDetectWritesEmbeddedManagedBlockAndPreservesUserLines(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gitignore")
+	seed := strings.Join([]string{
+		"# user-owned rule",
+		gitignore.StartMarker,
+		"# old block",
+		gitignore.EndMarker,
+		".planning",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed write failed: %v", err)
+	}
+
+	svc := NewService(dir, Config{})
+
+	res, err := svc.Detect(context.Background(), DetectOptions{Include: []string{"nextjs", "node", "visualstudiocode"}})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if res.FileAction != gitignore.FileActionUpdated {
+		t.Fatalf("unexpected file action: %s", res.FileAction)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	value := string(content)
+	if !strings.HasPrefix(value, "# user-owned rule\n") {
+		t.Fatalf("expected unmanaged prefix preserved exactly\n%s", value)
+	}
+	if !strings.HasSuffix(value, "\n.planning\n") {
+		t.Fatalf("expected unmanaged suffix preserved exactly\n%s", value)
+	}
+	for _, fragment := range []string{".next/", "node_modules/", ".vscode/"} {
+		if !strings.Contains(value, fragment) {
+			t.Fatalf("expected embedded template content %q in managed block\n%s", fragment, value)
+		}
+	}
+	if strings.Contains(value, "# old block") {
+		t.Fatalf("expected previous managed content replaced\n%s", value)
 	}
 }
 
@@ -1322,6 +1461,47 @@ func TestDetectDiffContractNextVSCodeFixture(t *testing.T) {
 	assertJSONContract(t, "detect_diff_next_vscode_app.json", normalizeCommandResultContract(res, dir))
 }
 
+func TestDetectFixtureProducesStableManagedBlockAndJSON(t *testing.T) {
+	t.Parallel()
+
+	run := func(t *testing.T) (string, string) {
+		t.Helper()
+
+		dir := copyRepoFixture(t, "next-vscode-app")
+		client := &fakeAPI{
+			available: provider.SupportedKeys,
+			template:  ".idea/\n.next/\nnode_modules/\n.vscode/\n",
+		}
+		svc := &Service{
+			CWD:       dir,
+			Client:    client,
+			Manager:   gitignore.NewManager(dir),
+			Detectors: fixtureDetectors("jetbrains", "nextjs", "node", "react", "visualstudiocode"),
+		}
+
+		res, err := svc.Detect(context.Background(), DetectOptions{})
+		if err != nil {
+			t.Fatalf("detect failed: %v", err)
+		}
+		managedBlock, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+		if err != nil {
+			t.Fatalf("read managed block: %v", err)
+		}
+
+		return string(managedBlock), marshalContractJSON(t, normalizeCommandResultContract(res, dir))
+	}
+
+	firstBlock, firstJSON := run(t)
+	secondBlock, secondJSON := run(t)
+
+	if firstBlock != secondBlock {
+		t.Fatalf("managed block changed across repeated fixture runs\nfirst:\n%s\nsecond:\n%s", firstBlock, secondBlock)
+	}
+	if firstJSON != secondJSON {
+		t.Fatalf("detect json changed across repeated fixture runs\nfirst:\n%s\nsecond:\n%s", firstJSON, secondJSON)
+	}
+}
+
 func TestDoctorContractLaravelJetBrainsFixture(t *testing.T) {
 	t.Parallel()
 
@@ -1352,6 +1532,81 @@ func TestDoctorContractLaravelJetBrainsFixture(t *testing.T) {
 	assertJSONContract(t, "doctor_laravel_jetbrains_app.json", normalizeDoctorResultContract(res, dir))
 }
 
+func TestDoctorFixtureProducesStableJSON(t *testing.T) {
+	t.Parallel()
+
+	run := func(t *testing.T) string {
+		t.Helper()
+
+		dir := copyRepoFixture(t, "laravel-jetbrains-app")
+		client := &fakeAPI{
+			available: provider.SupportedKeys,
+			runtime: api.RuntimeDiagnostics{
+				UpstreamCommit:  api.DefaultUpstreamCommit,
+				Offline:         false,
+				RemoteProviders: []string{"laravel", "composer", "jetbrains"},
+				CacheEntries: []api.CacheEntryStatus{
+					{Provider: "laravel", State: "fresh"},
+					{Provider: "composer", State: "stale", Detail: "etag mismatch"},
+				},
+				Decisions: []string{
+					"supported providers are validated against the checked-in GitHub catalog snapshot plus embedded exceptions",
+				},
+			},
+		}
+		svc := &Service{
+			CWD:       dir,
+			Client:    client,
+			Manager:   gitignore.NewManager(dir),
+			Detectors: fixtureDetectors("composer", "jetbrains", "laravel"),
+		}
+
+		res, err := svc.Doctor(context.Background(), DoctorOptions{})
+		if err != nil {
+			t.Fatalf("doctor failed: %v", err)
+		}
+
+		return marshalContractJSON(t, normalizeDoctorResultContract(res, dir))
+	}
+
+	first := run(t)
+	second := run(t)
+
+	if first != second {
+		t.Fatalf("doctor json changed across repeated fixture runs\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}
+
+func TestDetectSortsUnsupportedWarningsAcrossIncludeAndExclude(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	client := &fakeAPI{available: provider.SupportedKeys, template: "node_modules/\n"}
+	svc := &Service{
+		CWD:       dir,
+		Client:    client,
+		Manager:   gitignore.NewManager(dir),
+		Detectors: map[string]provider.Detector{"go": matchedDetector("go")},
+	}
+
+	res, err := svc.Detect(context.Background(), DetectOptions{
+		Include: []string{"zzz", "go"},
+		Exclude: []string{"bbb", "aaa"},
+	})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+
+	want := []string{
+		"unsupported provider key: aaa",
+		"unsupported provider key: bbb",
+		"unsupported provider key: zzz",
+	}
+	if !reflect.DeepEqual(res.UnsupportedKeyWarnings, want) {
+		t.Fatalf("unsupported warnings = %v, want %v", res.UnsupportedKeyWarnings, want)
+	}
+}
+
 func fixtureDetectors(keys ...string) map[string]provider.Detector {
 	registry := provider.Registry()
 	detectors := make(map[string]provider.Detector, len(keys))
@@ -1367,6 +1622,18 @@ func fixtureDetectors(keys ...string) map[string]provider.Detector {
 
 func assertJSONContract(t *testing.T, contractName string, value any) {
 	t.Helper()
+	got := marshalContractJSON(t, value)
+	want, err := os.ReadFile(filepath.Join(repoRoot(t), "testdata", "contracts", contractName))
+	if err != nil {
+		t.Fatalf("read contract %s: %v", contractName, err)
+	}
+	if got != string(want) {
+		t.Fatalf("contract mismatch for %s\nwant:\n%s\n got:\n%s", contractName, string(want), got)
+	}
+}
+
+func marshalContractJSON(t *testing.T, value any) string {
+	t.Helper()
 
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
@@ -1375,14 +1642,7 @@ func assertJSONContract(t *testing.T, contractName string, value any) {
 	if err := encoder.Encode(value); err != nil {
 		t.Fatalf("marshal contract json: %v", err)
 	}
-	got := buf.String()
-	want, err := os.ReadFile(filepath.Join(repoRoot(t), "testdata", "contracts", contractName))
-	if err != nil {
-		t.Fatalf("read contract %s: %v", contractName, err)
-	}
-	if got != string(want) {
-		t.Fatalf("contract mismatch for %s\nwant:\n%s\n got:\n%s", contractName, string(want), got)
-	}
+	return buf.String()
 }
 
 func normalizeCommandResultContract(result CommandResult, root string) CommandResult {

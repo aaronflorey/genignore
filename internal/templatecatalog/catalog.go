@@ -71,6 +71,21 @@ func Content(provider string) (string, error) {
 	return content, nil
 }
 
+func ContentForProviders(providers []string) (string, error) {
+	parts := make([]string, 0, len(providers))
+	for _, provider := range providers {
+		content, err := Content(provider)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+		parts = append(parts, content)
+	}
+	return strings.Join(parts, "\n\n"), nil
+}
+
 func load() ([]string, map[string]string, map[string]string, error) {
 	return loadFromFS(templateFS, "github-gitignore")
 }

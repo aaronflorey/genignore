@@ -67,6 +67,10 @@ type Client struct {
 	catalog   map[string]string
 }
 
+type EmbeddedClient struct {
+	fallback *Client
+}
+
 func NewClient() *Client {
 	return NewClientWithOptions(Options{})
 }
@@ -87,6 +91,10 @@ func NewClientWithOptions(opts Options) *Client {
 		cacheDir:       cacheDir,
 		upstreamCommit: upstreamCommit,
 	}
+}
+
+func NewEmbeddedClientWithOptions(opts Options) *EmbeddedClient {
+	return &EmbeddedClient{fallback: NewClientWithOptions(opts)}
 }
 
 type cacheMetadata struct {
@@ -181,6 +189,73 @@ func (c *Client) FetchTemplate(ctx context.Context, providers []string) (Templat
 	}
 
 	return TemplateResponse{Providers: providers, Content: strings.Join(parts, "\n\n"), AvailableProviders: availableProviders}, nil
+}
+
+func (c *EmbeddedClient) AvailableProviders(ctx context.Context) ([]string, error) {
+	if c.fallback.upstreamCommit == DefaultUpstreamCommit && !c.fallback.offline {
+		return providercatalog.RemoteSupportedKeys(), nil
+	}
+	return c.fallback.AvailableProviders(ctx)
+}
+
+func (c *EmbeddedClient) InspectRuntime(providers []string) RuntimeDiagnostics {
+	if c.fallback.upstreamCommit != DefaultUpstreamCommit || c.fallback.offline {
+		return c.fallback.InspectRuntime(providers)
+	}
+
+	remoteProviders, customProviders := splitProvidersBySource(providers)
+	decisions := []string{"supported providers are validated against the checked-in GitHub catalog snapshot plus embedded exceptions"}
+	if len(remoteProviders) == 0 {
+		decisions = append(decisions, "no network template fetch is required because the selection is satisfied entirely by embedded providers")
+	} else {
+		decisions = append(decisions, "upstream templates are loaded from the embedded github/gitignore snapshot pinned by runtime.upstream_commit")
+	}
+	if len(customProviders) > 0 {
+		decisions = append(decisions, "embedded custom providers are merged with upstream templates in requested provider order")
+	}
+
+	return RuntimeDiagnostics{
+		UpstreamCommit:    c.fallback.upstreamCommit,
+		Offline:           c.fallback.offline,
+		RemoteProviders:   remoteProviders,
+		EmbeddedProviders: customProviders,
+		Decisions:         decisions,
+	}
+}
+
+func (c *EmbeddedClient) FetchTemplate(ctx context.Context, providers []string) (TemplateResponse, error) {
+	if c.fallback.upstreamCommit != DefaultUpstreamCommit || c.fallback.offline {
+		return c.fallback.FetchTemplate(ctx, providers)
+	}
+	if len(providers) == 0 {
+		return TemplateResponse{}, fmt.Errorf("providers must not be empty")
+	}
+
+	parts := make([]string, 0, len(providers))
+	for _, key := range providers {
+		var (
+			content string
+			err     error
+		)
+		if customtemplate.HasProvider(key) {
+			content, err = customtemplate.Content(key)
+		} else {
+			content, err = templatecatalog.Content(key)
+		}
+		if err != nil {
+			return TemplateResponse{}, err
+		}
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+		parts = append(parts, content)
+	}
+
+	return TemplateResponse{
+		Providers:          providers,
+		Content:            strings.Join(parts, "\n\n"),
+		AvailableProviders: providercatalog.RemoteSupportedKeys(),
+	}, nil
 }
 
 func splitProvidersBySource(providers []string) ([]string, []string) {

@@ -6,6 +6,10 @@ func InitError() error {
 	return templatecatalog.InitError()
 }
 
-func RemoteSupportedKeys() []string {
+func SupportedKeys() []string {
 	return templatecatalog.Providers()
+}
+
+func RemoteSupportedKeys() []string {
+	return SupportedKeys()
 }

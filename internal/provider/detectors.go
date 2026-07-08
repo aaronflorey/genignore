@@ -3,12 +3,14 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/aaronflorey/genignore/internal/rulecatalog"
 	"github.com/go-git/go-billy/v5/osfs"
 	gitignore "github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
@@ -91,48 +93,140 @@ func (f DetectorFunc) Detect(ctx context.Context, cwd string) Result {
 }
 
 func Registry() map[string]Detector {
-	return map[string]Detector{
-		"composer":         fileExistsDetector("composer", "composer.json", "found composer.json"),
-		"node":             nodeDetector(),
-		"go":               fileExistsDetector("go", "go.mod", "found go.mod"),
-		"terraform":        anyGlobDetector("terraform", "found terraform file", "*.tf", "*.tfvars", ".terraform.lock.hcl"),
-		"rust":             fileExistsDetector("rust", "Cargo.toml", "found Cargo.toml"),
-		"java":             anyFileDetector("java", []string{"pom.xml", "build.gradle", "build.gradle.kts"}, "found java project file"),
-		"kotlin":           anySignalDetector("kotlin", signalDetector{reason: "found kotlin project file", match: anySignalMatch(anyFileSignal("build.gradle.kts", "settings.gradle.kts"), anyGlobSignal("found kotlin source file", "*.kt"))}),
-		"dotnetcore":       anyGlobDetector("dotnetcore", "found dotnet project file", "*.sln", "*.csproj"),
-		"csharp":           anySignalDetector("csharp", signalDetector{reason: "found csharp project file", match: anySignalMatch(anyGlobSignal("found csharp solution/project file", "*.sln", "*.csproj"), anyGlobSignal("found csharp source file", "*.cs"))}),
-		"dart":             fileExistsDetector("dart", "pubspec.yaml", "found pubspec.yaml"),
-		"flutter":          flutterDetector(),
-		"swift":            anySignalDetector("swift", signalDetector{reason: "found swift project file", match: anySignalMatch(fileSignal("Package.swift"), anyGlobSignal("found swift source file", "*.swift"))}),
-		"xcode":            anyGlobDetector("xcode", "found xcode project file", "*.xcodeproj", "*.xcworkspace"),
-		"android":          anyFileDetector("android", []string{"AndroidManifest.xml", filepath.Join("app", "src", "main", "AndroidManifest.xml")}, "found android manifest"),
-		"ruby":             fileExistsDetector("ruby", "Gemfile", "found Gemfile"),
-		"maven":            fileExistsDetector("maven", "pom.xml", "found pom.xml"),
-		"rails":            anyFileDetector("rails", []string{filepath.Join("bin", "rails"), filepath.Join("config", "application.rb")}, "found rails project file"),
-		"jekyll":           fileExistsDetector("jekyll", "_config.yml", "found _config.yml"),
-		"symfony":          anyFileDetector("symfony", []string{filepath.Join("bin", "console"), filepath.Join("config", "bundles.php"), "symfony.lock"}, "found symfony project file"),
-		"laravel":          laravelDetector(),
-		"nextjs":           anyFileDetector("nextjs", []string{"next.config.js", "next.config.mjs", "next.config.ts"}, "found next config"),
-		"nuxtjs":           anyFileDetector("nuxtjs", []string{"nuxt.config.js", "nuxt.config.mjs", "nuxt.config.ts"}, "found nuxt config"),
-		"python":           anyFileDetector("python", []string{"pyproject.toml", "requirements.txt", "setup.py"}, "found python project file"),
-		"vue":              vueDetector(),
-		"react":            reactDetector(),
-		"macos":            osDetector("macos", "darwin"),
-		"linux":            osDetector("linux", "linux"),
-		"windows":          osDetector("windows", "windows"),
-		"visualstudiocode": vscodeProjectDetector(),
-		"phpstorm":         ideWithJetBrainsLanguageInferenceDetector("phpstorm", "composer.json"),
-		"jetbrains":        jetbrainsProjectDetector(),
-		"intellij":         ideDetector("intellij"),
-		"pycharm":          ideWithJetBrainsSignalDetector("pycharm", signalDetector{reason: "python project file", match: anyFileSignal("pyproject.toml", "requirements.txt", "setup.py")}),
-		"webstorm":         ideWithJetBrainsLanguageInferenceDetector("webstorm", "package.json"),
-		"goland":           ideWithJetBrainsLanguageInferenceDetector("goland", "go.mod"),
-		"rubymine":         ideWithJetBrainsLanguageInferenceDetector("rubymine", "Gemfile"),
-		"rider":            ideWithJetBrainsSignalDetector("rider", signalDetector{reason: ".sln/.csproj", match: anyGlobSignal(".sln/.csproj", "*.sln", "*.csproj")}),
-		"clion":            ideWithJetBrainsLanguageInferenceDetector("clion", "CMakeLists.txt"),
-		"appcode":          ideDetector("appcode"),
-		"androidstudio":    ideDetector("androidstudio"),
+	if err := rulecatalog.InitError(); err != nil {
+		panic("provider: load rule catalog: " + err.Error())
 	}
+
+	registry := map[string]Detector{
+		"terraform":     anyGlobDetector("terraform", "found terraform file", "*.tf", "*.tfvars", ".terraform.lock.hcl"),
+		"kotlin":        anySignalDetector("kotlin", signalDetector{reason: "found kotlin project file", match: anySignalMatch(anyFileSignal("build.gradle.kts", "settings.gradle.kts"), anyGlobSignal("found kotlin source file", "*.kt"))}),
+		"dotnetcore":    anyGlobDetector("dotnetcore", "found dotnet project file", "*.sln", "*.csproj"),
+		"csharp":        anySignalDetector("csharp", signalDetector{reason: "found csharp project file", match: anySignalMatch(anyGlobSignal("found csharp solution/project file", "*.sln", "*.csproj"), anyGlobSignal("found csharp source file", "*.cs"))}),
+		"flutter":       flutterDetector(),
+		"xcode":         anyGlobDetector("xcode", "found xcode project file", "*.xcodeproj", "*.xcworkspace"),
+		"nuxtjs":        anyFileDetector("nuxtjs", []string{"nuxt.config.js", "nuxt.config.mjs", "nuxt.config.ts"}, "found nuxt config"),
+		"vue":           vueDetector(),
+		"react":         reactDetector(),
+		"macos":         osDetector("macos", "darwin"),
+		"linux":         osDetector("linux", "linux"),
+		"windows":       osDetector("windows", "windows"),
+		"phpstorm":      ideWithJetBrainsLanguageInferenceDetector("phpstorm", "composer.json"),
+		"intellij":      ideDetector("intellij"),
+		"pycharm":       ideWithJetBrainsSignalDetector("pycharm", signalDetector{reason: "python project file", match: anyFileSignal("pyproject.toml", "requirements.txt", "setup.py")}),
+		"webstorm":      ideWithJetBrainsLanguageInferenceDetector("webstorm", "package.json"),
+		"goland":        ideWithJetBrainsLanguageInferenceDetector("goland", "go.mod"),
+		"rubymine":      ideWithJetBrainsLanguageInferenceDetector("rubymine", "Gemfile"),
+		"rider":         ideWithJetBrainsSignalDetector("rider", signalDetector{reason: ".sln/.csproj", match: anyGlobSignal(".sln/.csproj", "*.sln", "*.csproj")}),
+		"clion":         ideWithJetBrainsLanguageInferenceDetector("clion", "CMakeLists.txt"),
+		"appcode":       ideDetector("appcode"),
+		"androidstudio": ideDetector("androidstudio"),
+	}
+
+	for _, entry := range rulecatalog.Entries() {
+		registry[entry.Provider] = ruleEntryDetector(entry)
+	}
+
+	return registry
+}
+
+func ruleEntryDetector(entry rulecatalog.Entry) Detector {
+	return DetectorFunc(func(ctx context.Context, cwd string) Result {
+		for _, dir := range searchDirsFor(ctx, cwd) {
+			root := os.DirFS(dir)
+			for _, rule := range entry.Match {
+				match, err := rulecatalog.MatchRuleWithResult(root, rule)
+				if err != nil {
+					return Result{
+						Key:      entry.Provider,
+						Matched:  false,
+						Reason:   "failed to evaluate detection rule",
+						Evidence: filepath.Join(dir, filepath.FromSlash(rule.Path)),
+						Error:    err.Error(),
+					}
+				}
+				if match.Matched {
+					return Result{
+						Key:      entry.Provider,
+						Matched:  true,
+						Reason:   ruleMatchReason(entry.Provider, match),
+						Evidence: ruleMatchEvidence(dir, match),
+					}
+				}
+			}
+		}
+
+		return Result{Key: entry.Provider, Matched: false, Reason: "signal not found"}
+	})
+}
+
+func ruleMatchReason(provider string, match rulecatalog.MatchResult) string {
+	switch provider {
+	case "composer":
+		return "found composer.json"
+	case "android":
+		return "found android manifest"
+	case "dart":
+		return "found pubspec.yaml"
+	case "go":
+		return "found go.mod"
+	case "java":
+		return "found java project file"
+	case "jekyll":
+		return "found _config.yml"
+	case "jetbrains":
+		return "found JetBrains project metadata"
+	case "laravel":
+		if match.Rule.Type == rulecatalog.RuleTypeFileContentLine {
+			return "composer.json references laravel/framework"
+		}
+		return "found artisan file"
+	case "maven":
+		return "found pom.xml"
+	case "nextjs":
+		return "found next config"
+	case "node":
+		return "found node project file"
+	case "nuxtjs":
+		return "found nuxt config"
+	case "python":
+		return "found python project file"
+	case "rails":
+		return "found rails project file"
+	case "ruby":
+		return "found Gemfile"
+	case "rust":
+		return "found Cargo.toml"
+	case "symfony":
+		return "found symfony project file"
+	case "swift":
+		if match.Path == "Package.swift" {
+			return "found swift project file"
+		}
+		return "found swift source file"
+	case "terraform":
+		return "found terraform file"
+	case "visualstudiocode":
+		return "found VS Code workspace metadata"
+	case "xcode":
+		return "found xcode project file"
+	}
+
+	switch match.Rule.Type {
+	case rulecatalog.RuleTypeFilePath:
+		return "matched file path rule"
+	case rulecatalog.RuleTypeFileContentLine:
+		return fmt.Sprintf("matched content line rule containing %q", match.Rule.Contains)
+	default:
+		return "matched detection rule"
+	}
+}
+
+func ruleMatchEvidence(dir string, match rulecatalog.MatchResult) string {
+	path := filepath.Join(dir, filepath.FromSlash(match.Path))
+	if match.Line > 0 {
+		return fmt.Sprintf("%s:%d", path, match.Line)
+	}
+	return path
 }
 
 func ideDetector(key string) Detector {
@@ -257,46 +351,6 @@ func ideInstallCandidatesForKey(key string) []string {
 	return copyOfCandidates
 }
 
-func vscodeProjectDetector() Detector {
-	return workspaceMetadataDetector("visualstudiocode", []string{".vscode"}, []string{"*.code-workspace"}, "found VS Code workspace metadata")
-}
-
-func jetbrainsProjectDetector() Detector {
-	return workspaceMetadataDetector("jetbrains", []string{".idea"}, []string{"*.iml"}, "found JetBrains project metadata")
-}
-
-func workspaceMetadataDetector(key string, dirNames []string, patterns []string, reason string) Detector {
-	return DetectorFunc(func(ctx context.Context, cwd string) Result {
-		for _, dir := range searchDirsFor(ctx, cwd) {
-			for _, name := range dirNames {
-				path := filepath.Join(dir, name)
-				info, err := os.Stat(path)
-				if err == nil {
-					if info.IsDir() {
-						return Result{Key: key, Matched: true, Reason: reason, Evidence: path}
-					}
-					continue
-				}
-				if os.IsPermission(err) {
-					return Result{Key: key, Matched: false, Reason: "permission denied", Evidence: path, Error: err.Error()}
-				}
-			}
-
-			for _, pattern := range patterns {
-				matches, err := filepath.Glob(filepath.Join(dir, pattern))
-				if err != nil {
-					continue
-				}
-				if len(matches) > 0 {
-					return Result{Key: key, Matched: true, Reason: reason, Evidence: matches[0]}
-				}
-			}
-		}
-
-		return Result{Key: key, Matched: false, Reason: "signal not found"}
-	})
-}
-
 func vueDetector() Detector {
 	return DetectorFunc(func(ctx context.Context, cwd string) Result {
 		for _, dir := range searchDirsFor(ctx, cwd) {
@@ -359,29 +413,6 @@ func anyFileDetector(key string, files []string, reason string) Detector {
 			}
 		}
 		return Result{Key: key, Matched: false, Reason: "signal not found"}
-	})
-}
-
-func nodeDetector() Detector {
-	return anyFileDetector("node", []string{"package.json", "bun.lock", "bun.lockb"}, "found node project file")
-}
-
-func laravelDetector() Detector {
-	return DetectorFunc(func(ctx context.Context, cwd string) Result {
-		for _, dir := range searchDirsFor(ctx, cwd) {
-			artisan := filepath.Join(dir, "artisan")
-			if _, err := os.Stat(artisan); err == nil {
-				return Result{Key: "laravel", Matched: true, Reason: "found artisan file", Evidence: artisan}
-			}
-		}
-		content, composer, result, ok := readSignalFile(ctx, "laravel", cwd, "composer.json")
-		if !ok {
-			return result
-		}
-		if strings.Contains(string(content), "laravel/framework") {
-			return Result{Key: "laravel", Matched: true, Reason: "composer.json references laravel/framework", Evidence: composer}
-		}
-		return Result{Key: "laravel", Matched: false, Reason: "signal not found"}
 	})
 }
 
