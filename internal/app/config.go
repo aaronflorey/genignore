@@ -16,17 +16,11 @@ var userHomeDir = os.UserHomeDir
 
 type Config struct {
 	Defaults ConfigDefaults `mapstructure:"defaults" toml:"defaults"`
-	Runtime  ConfigRuntime  `mapstructure:"runtime" toml:"runtime"`
 }
 
 type ConfigDefaults struct {
 	Providers   []string `mapstructure:"providers" toml:"providers"`
 	IgnoreRules []string `mapstructure:"ignore_rules" toml:"ignore_rules"`
-}
-
-type ConfigRuntime struct {
-	Offline        bool   `mapstructure:"offline" toml:"offline"`
-	UpstreamCommit string `mapstructure:"upstream_commit" toml:"upstream_commit"`
 }
 
 func LoadConfig() (Config, error) {

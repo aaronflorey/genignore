@@ -42,12 +42,12 @@ genignore detect --diff
 genignore add go node
 ```
 
-4. Reuse previously fetched remote templates without a live GitHub call:
+4. Optionally add machine-level defaults for extra providers or ignore rules:
 
 ```toml
-[runtime]
-offline = true
-upstream_commit = "3780fff86c705155792fb3e1787cebd6281ba8cf"
+[defaults]
+providers = ["go", "node"]
+ignore_rules = [".direnv/", "coverage.out"]
 ```
 
 If you are working from source:
@@ -85,7 +85,7 @@ genignore resolve
 genignore resolve --include macos --exclude windows --json
 ```
 
-Explain the current detector evidence, provider resolution, cache state, and runtime decisions:
+Explain the current detector evidence, provider resolution, embedded catalogs, and provenance decisions:
 
 ```bash
 genignore doctor
@@ -98,25 +98,13 @@ Exclude certain providers from detection:
 genignore detect --exclude windows,macos
 ```
 
-Enable explicit offline template reuse from the machine-level config file:
+Machine-level configuration supports only the `defaults` table. Unknown fields are rejected, so stale `[runtime]` settings now fail config loading instead of being ignored.
 
-```toml
-[runtime]
-offline = true
-upstream_commit = "3780fff86c705155792fb3e1787cebd6281ba8cf"
-```
-
-`runtime.upstream_commit` pins remote catalog lookups and remote template fetches to a specific `github/gitignore` commit so equivalent inputs can regenerate against the same upstream revision later. If omitted, `genignore` uses the checked-in default pin `3780fff86c705155792fb3e1787cebd6281ba8cf`.
-
-`runtime.offline = true` keeps provider validation on the checked-in GitHub catalog snapshot and loads remote template content from the local cache created by prior online runs. Offline cache reuse now requires matching metadata for the pinned upstream commit, a valid integrity checksum, and a fresh fetch timestamp. If a required cached remote template is missing, stale, or corrupt, `genignore` fails clearly instead of silently widening support or falling back to a live refresh.
-
-The canonical supported-provider contract is the checked-in GitHub catalog snapshot shipped with `genignore`, plus the embedded `ai-agents` and `wrangler` exceptions. Live GitHub fetches are still used to download remote template bodies during normal online runs, and any upstream drift is surfaced as warnings instead of changing the local support contract implicitly.
-
-Online runs store cache metadata alongside remote catalog and template bodies, including the pinned upstream commit, `ETag`, fetch time, and checksum. When cached metadata is still valid, `genignore` sends `If-None-Match` and reuses cached content on `304 Not Modified` instead of downloading the same payload again.
+The canonical supported-provider contract is the embedded `github/gitignore` catalog snapshot shipped with `genignore`, plus the embedded `ai-agents` and `wrangler` exceptions. Template bodies are loaded from checked-in content, so normal command execution does not require network access.
 
 Generated managed blocks now include a deterministic `# Provenance:` line that records the pinned `github/gitignore` commit and any embedded providers that contributed content.
 
-`genignore doctor` is the supported diagnostics surface for detector evidence, provider resolution, cache state, and degraded-runtime decisions. Detection entries classify repository-backed evidence separately from host-only heuristics such as runtime OS or installed-application checks.
+`genignore doctor` is the supported diagnostics surface for detector evidence, provider resolution, embedded catalog counts, JSON rule-catalog status, retained embedded custom providers, and managed-block provenance. Detection entries classify repository-backed evidence separately from host-only heuristics such as runtime OS or installed-application checks.
 
 `genignore resolve` is the supported read-only automation surface for provider detection and final provider resolution. It reuses the same ordering, key validation, and include or exclude normalization as `genignore detect`, but it does not fetch templates or mutate `.gitignore`.
 
@@ -124,7 +112,7 @@ Generated managed blocks now include a deterministic `# Provenance:` line that r
 
 `genignore detect --diff` and `genignore add --diff` preview the exact managed-block change without writing `.gitignore`. The preview reports the same `File:` action that the eventual write path would take: `created`, `updated`, or `no-op`.
 
-Output labels in human-readable mode include `Command:`, `Target:`, `Detected:`, `Final:`, `Added:`, `Included:`, `Excluded:`, `File:`, `Preview:`, `Diff:`, `Warning:`, `Detection:`, `Offline:`, `Upstream:`, `Remote:`, `Embedded:`, `Cache:`, `Decision:`, and `Provenance:`.
+Output labels in human-readable mode include `Command:`, `Target:`, `Detected:`, `Final:`, `Added:`, `Included:`, `Excluded:`, `File:`, `Preview:`, `Diff:`, `Warning:`, `Detection:`, `Embedded catalog providers:`, `Selected providers:`, `Rule catalog:`, `Retained custom providers:`, `Decision:`, and `Provenance:`.
 
 Default editor detection is intentionally repo-backed: `visualstudiocode` is detected from `.vscode/` or `*.code-workspace`, and `jetbrains` is detected from `.idea/` or `*.iml`. Installed editors alone do not change default detection results.
 

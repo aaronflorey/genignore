@@ -5,7 +5,7 @@
 
 - `Go >= 1.22` (from `go.mod`)
 - `git` (for cloning the repository)
-- Internet access to GitHub APIs (`api.github.com` and `raw.githubusercontent.com`) for provider catalog/template fetches
+- No runtime network access is required for normal CLI use; provider catalogs, template bodies, and repository detection rules ship embedded in the binary
 
 ## Installation steps
 
@@ -45,9 +45,9 @@ go run . detect
    go version
    ```
 
-2. **Remote provider fetch failures**
-   - Symptom: command errors like `request list API` / `list API returned status ...` / `template API returned status ...`.
-   - Fix: verify network access to GitHub and retry.
+2. **Config file rejected**
+   - Symptom: startup fails with `invalid config file ...`.
+   - Fix: remove unsupported or misspelled fields; only the `[defaults]` table with `providers` and `ignore_rules` is accepted.
 
 3. **No providers selected**
    - Symptom: `error: no providers selected after include/exclude`.
@@ -60,4 +60,5 @@ go run . detect
 ## Next steps
 
 - See [DEVELOPMENT.md](DEVELOPMENT.md) for local development workflows and command reference.
+- See [CONFIGURATION.md](CONFIGURATION.md) for machine-level defaults and strict TOML validation.
 - See [TESTING.md](TESTING.md) for test commands and CI test behavior.

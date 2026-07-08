@@ -35,9 +35,6 @@ func TestLoadConfigValidFile(t *testing.T) {
 		"[defaults]",
 		"providers = [\"go\", \"node\"]",
 		"ignore_rules = [\".direnv/\", \"coverage.out\"]",
-		"[runtime]",
-		"offline = true",
-		"upstream_commit = \"1234567890abcdef1234567890abcdef12345678\"",
 		"",
 	}, "\n")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -57,12 +54,6 @@ func TestLoadConfigValidFile(t *testing.T) {
 	}
 	if want := []string{".direnv/", "coverage.out"}; strings.Join(cfg.Defaults.IgnoreRules, ",") != strings.Join(want, ",") {
 		t.Fatalf("unexpected ignore rules: %v", cfg.Defaults.IgnoreRules)
-	}
-	if !cfg.Runtime.Offline {
-		t.Fatalf("expected runtime.offline to load from config")
-	}
-	if cfg.Runtime.UpstreamCommit != "1234567890abcdef1234567890abcdef12345678" {
-		t.Fatalf("unexpected runtime.upstream_commit: %q", cfg.Runtime.UpstreamCommit)
 	}
 }
 
@@ -86,6 +77,37 @@ func TestLoadConfigInvalidFile(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid config file "+path) {
 		t.Fatalf("expected config path in error, got %v", err)
+	}
+}
+
+func TestLoadConfigRejectsObsoleteRuntimeFields(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, configRelativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	content := strings.Join([]string{
+		"[defaults]",
+		"providers = [\"go\"]",
+		"[runtime]",
+		"offline = true",
+		"upstream_commit = \"1234567890abcdef1234567890abcdef12345678\"",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	oldUserHomeDir := userHomeDir
+	userHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { userHomeDir = oldUserHomeDir })
+
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected config load error")
+	}
+	if !strings.Contains(err.Error(), "strict mode: fields in the document are missing in the target struct") {
+		t.Fatalf("expected unknown runtime field error, got %v", err)
 	}
 }
 
@@ -137,9 +159,6 @@ func TestRunLoadsConfigAndPassesItToService(t *testing.T) {
 		"[defaults]",
 		"providers = [\"wrangler\"]",
 		"ignore_rules = [\".direnv/\"]",
-		"[runtime]",
-		"offline = true",
-		"upstream_commit = \"1234567890abcdef1234567890abcdef12345678\"",
 		"",
 	}, "\n")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -153,12 +172,6 @@ func TestRunLoadsConfigAndPassesItToService(t *testing.T) {
 		}
 		if got, want := cfg.Defaults.IgnoreRules, []string{".direnv/"}; strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("unexpected ignore rules: %v", got)
-		}
-		if !cfg.Runtime.Offline {
-			t.Fatalf("expected runtime.offline to be passed through to the service")
-		}
-		if cfg.Runtime.UpstreamCommit != "1234567890abcdef1234567890abcdef12345678" {
-			t.Fatalf("unexpected runtime.upstream_commit: %q", cfg.Runtime.UpstreamCommit)
 		}
 		return stubCommandService{detectResult: CommandResult{Command: "detect", FinalProviders: []string{"wrangler"}, FileAction: gitignore.FileActionDryRun}}
 	}

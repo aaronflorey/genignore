@@ -2,34 +2,25 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
-	"maps"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/aaronflorey/genignore/internal/providercatalog"
 )
 
-func TestNewClientWithOptionsPinsUpstreamCommit(t *testing.T) {
+func TestNewClientWithOptionsPreservesDiagnosticsConfig(t *testing.T) {
 	t.Parallel()
 
-	client := NewClientWithOptions(Options{UpstreamCommit: "1234567890abcdef1234567890abcdef12345678"})
+	client := NewClientWithOptions(Options{Offline: true, UpstreamCommit: "1234567890abcdef1234567890abcdef12345678"})
+	if !client.offline {
+		t.Fatal("expected offline flag to be preserved for diagnostics")
+	}
 	if client.upstreamCommit != "1234567890abcdef1234567890abcdef12345678" {
 		t.Fatalf("unexpected upstream commit: %q", client.upstreamCommit)
 	}
-	if client.listURL != "https://api.github.com/repos/github/gitignore/git/trees/1234567890abcdef1234567890abcdef12345678?recursive=1" {
-		t.Fatalf("unexpected list URL: %q", client.listURL)
-	}
-	if client.templateURL != "https://raw.githubusercontent.com/github/gitignore/1234567890abcdef1234567890abcdef12345678/" {
-		t.Fatalf("unexpected template URL: %q", client.templateURL)
+	if _, ok := any(NewEmbeddedClientWithOptions(Options{})).(*EmbeddedClient); !ok {
+		t.Fatal("expected embedded client constructor to remain available")
 	}
 }
 
@@ -42,61 +33,10 @@ func TestDefaultUpstreamCommitMatchesEmbeddedCatalogPin(t *testing.T) {
 	}
 }
 
-func TestClientUsesFixtures(t *testing.T) {
-	t.Parallel()
-	templateFixture, err := os.ReadFile(filepath.Join("testdata", "template.txt"))
-	if err != nil {
-		t.Fatalf("read template fixture failed: %v", err)
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"},{"path":"Node.gitignore","type":"blob"},{"path":"Global/macOS.gitignore","type":"blob"}]}`))
-		case "/templates/Node.gitignore":
-			_, _ = w.Write(templateFixture)
-		case "/templates/Go.gitignore":
-			_, _ = w.Write([]byte("bin/\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	list, err := client.AvailableProviders(context.Background())
-	if err != nil {
-		t.Fatalf("AvailableProviders failed: %v", err)
-	}
-	for _, key := range []string{"go", "macos", "node"} {
-		if !slices.Contains(list, key) {
-			t.Fatalf("expected canonical provider list to contain %q: %v", key, list)
-		}
-	}
-	listAgain, err := client.AvailableProviders(context.Background())
-	if err != nil {
-		t.Fatalf("AvailableProviders second call failed: %v", err)
-	}
-	if !slices.Equal(listAgain, list) {
-		t.Fatalf("expected deterministic list ordering, got %v then %v", list, listAgain)
-	}
-
-	template, err := client.FetchTemplate(context.Background(), []string{"node"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if template.Content != strings.TrimSpace(string(templateFixture)) {
-		t.Fatalf("unexpected template content")
-	}
-}
-
 func TestAvailableProvidersUsesCanonicalProviderCatalog(t *testing.T) {
 	t.Parallel()
 
-	client := NewClient()
+	client := NewClientWithOptions(Options{UpstreamCommit: "1234567890abcdef1234567890abcdef12345678"})
 	got, err := client.AvailableProviders(context.Background())
 	if err != nil {
 		t.Fatalf("AvailableProviders failed: %v", err)
@@ -104,42 +44,6 @@ func TestAvailableProvidersUsesCanonicalProviderCatalog(t *testing.T) {
 	if !slices.Equal(got, providercatalog.RemoteSupportedKeys()) {
 		t.Fatalf("unexpected canonical provider list")
 	}
-}
-
-func TestAvailableProvidersUsesConfiguredUpstreamCommitCatalog(t *testing.T) {
-	t.Parallel()
-
-	const upstreamCommit = "1234567890abcdef1234567890abcdef12345678"
-	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests++
-		if r.URL.Path != "/repos/github/gitignore/git/trees/"+upstreamCommit {
-			w.WriteHeader(http.StatusNotFound)
-			t.Fatalf("unexpected catalog path: %q", r.URL.Path)
-		}
-		if r.URL.RawQuery != "recursive=1" {
-			w.WriteHeader(http.StatusBadRequest)
-			t.Fatalf("unexpected catalog query: %q", r.URL.RawQuery)
-		}
-		_, _ = w.Write([]byte(`{"tree":[{"path":"AL.gitignore","type":"blob"},{"path":"community/JavaScript/Vue.gitignore","type":"blob"},{"path":"Global/AL.gitignore","type":"blob"}]}`))
-	}))
-	defer server.Close()
-
-	client := NewClientWithOptions(Options{UpstreamCommit: upstreamCommit})
-	client.listURL = server.URL + "/repos/github/gitignore/git/trees/" + upstreamCommit + "?recursive=1"
-	client.cacheDir = t.TempDir()
-
-	got, err := client.AvailableProviders(context.Background())
-	if err != nil {
-		t.Fatalf("AvailableProviders failed: %v", err)
-	}
-	if !slices.Equal(got, []string{"al", "global/al", "javascript/vue"}) {
-		t.Fatalf("unexpected configured provider list: %v", got)
-	}
-	if requests != 1 {
-		t.Fatalf("expected one catalog request, got %d", requests)
-	}
-
 	gotAgain, err := client.AvailableProviders(context.Background())
 	if err != nil {
 		t.Fatalf("AvailableProviders second call failed: %v", err)
@@ -147,200 +51,12 @@ func TestAvailableProvidersUsesConfiguredUpstreamCommitCatalog(t *testing.T) {
 	if !slices.Equal(gotAgain, got) {
 		t.Fatalf("expected deterministic list ordering, got %v then %v", got, gotAgain)
 	}
-	if requests != 1 {
-		t.Fatalf("expected cached catalog reuse, got %d requests", requests)
-	}
 }
 
-func TestFetchTemplateReturnsStableErrorOnNonOKResponse(t *testing.T) {
+func TestFetchTemplateUsesEmbeddedUpstreamTemplateWithoutHTTPServer(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`))
-		case "/templates/Node.gitignore":
-			w.WriteHeader(http.StatusBadGateway)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	_, err := client.FetchTemplate(context.Background(), []string{"node"})
-	if err == nil || err.Error() != "template API returned status 502" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestFetchTemplateReturnsRateLimitHintOn403(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`))
-		case "/templates/Node.gitignore":
-			w.Header().Set("X-RateLimit-Remaining", "0")
-			w.WriteHeader(http.StatusForbidden)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	_, err := client.FetchTemplate(context.Background(), []string{"node"})
-	want := "template API returned status 403; GitHub API rate limit exceeded — set GITHUB_TOKEN to increase limits"
-	if err == nil || err.Error() != want {
-		t.Fatalf("unexpected error:\ngot:  %v\nwant: %s", err, want)
-	}
-}
-
-func TestFetchTemplateOfflineUsesCachedRemoteTemplate(t *testing.T) {
-	t.Parallel()
-
-	cacheDir := t.TempDir()
-	live := NewClientWithOptions(Options{})
-	live.cacheDir = cacheDir
-	offline := NewClientWithOptions(Options{Offline: true})
-	offline.cacheDir = cacheDir
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`))
-		case "/templates/Node.gitignore":
-			_, _ = w.Write([]byte("node_modules/\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-	live.listURL = server.URL + "/catalog"
-	live.templateURL = server.URL + "/templates/"
-
-	if _, err := live.FetchTemplate(context.Background(), []string{"node"}); err != nil {
-		t.Fatalf("live fetch failed: %v", err)
-	}
-
-	resp, err := offline.FetchTemplate(context.Background(), []string{"node"})
-	if err != nil {
-		t.Fatalf("offline fetch failed: %v", err)
-	}
-	if resp.Content != "node_modules/" {
-		t.Fatalf("unexpected cached template content: %q", resp.Content)
-	}
-}
-
-func TestFetchTemplateOfflineRequiresCachedRemoteTemplate(t *testing.T) {
-	t.Parallel()
-
-	client := NewClientWithOptions(Options{Offline: true})
-	client.cacheDir = t.TempDir()
-
-	_, err := client.FetchTemplate(context.Background(), []string{"node"})
-	if err == nil || err.Error() != "offline mode requires cached template for provider: node" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestFetchTemplateOfflineRejectsStaleCachedTemplate(t *testing.T) {
-	t.Parallel()
-
-	client := NewClientWithOptions(Options{Offline: true})
-	client.cacheDir = t.TempDir()
-	writeCachedTemplateFixture(t, client, "node", []byte("node_modules/\n"), "etag-node", time.Now().Add(-cacheFreshnessWindow-time.Hour))
-
-	_, err := client.FetchTemplate(context.Background(), []string{"node"})
-	if err == nil || err.Error() != "cached template for provider node is stale; rerun without runtime.offline to refresh it" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestFetchTemplateOfflineRejectsTamperedCachedTemplate(t *testing.T) {
-	t.Parallel()
-
-	client := NewClientWithOptions(Options{Offline: true})
-	client.cacheDir = t.TempDir()
-	writeCachedTemplateFixture(t, client, "node", []byte("node_modules/\n"), "etag-node", time.Now())
-	if err := os.WriteFile(client.templateCachePath("node"), []byte("tampered\n"), 0o644); err != nil {
-		t.Fatalf("tamper cache: %v", err)
-	}
-
-	_, err := client.FetchTemplate(context.Background(), []string{"node"})
-	if err == nil || err.Error() != "cached template for provider node failed integrity validation" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestFetchTemplateSupportsEmbeddedCustomProviderWithoutRemoteRequest(t *testing.T) {
-	t.Parallel()
-
-	hitRemoteTemplate := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/templates/") {
-			hitRemoteTemplate = true
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"ai-agents"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if hitRemoteTemplate {
-		t.Fatalf("expected custom-only template fetch to skip remote API call")
-	}
-	if !strings.Contains(resp.Content, ".agents/") || !strings.Contains(resp.Content, ".claude/") || !strings.Contains(resp.Content, ".cursor/") {
-		t.Fatalf("unexpected embedded custom template content: %q", resp.Content)
-	}
-}
-
-func TestFetchTemplateSupportsWranglerEmbeddedCustomProviderWithoutRemoteRequest(t *testing.T) {
-	t.Parallel()
-
-	hitRemoteTemplate := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/templates/") {
-			hitRemoteTemplate = true
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"wrangler"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if hitRemoteTemplate {
-		t.Fatalf("expected wrangler-only template fetch to skip remote API call")
-	}
-	for _, fragment := range []string{".wrangler/", ".dev.vars*", "!.dev.vars.example"} {
-		if !strings.Contains(resp.Content, fragment) {
-			t.Fatalf("missing %q in wrangler template content: %q", fragment, resp.Content)
-		}
-	}
-}
-
-func TestEmbeddedClientUsesEmbeddedUpstreamTemplateWithoutHTTPServer(t *testing.T) {
-	t.Parallel()
-
-	client := NewEmbeddedClientWithOptions(Options{})
+	client := NewClientWithOptions(Options{UpstreamCommit: "1234567890abcdef1234567890abcdef12345678"})
 
 	resp, err := client.FetchTemplate(context.Background(), []string{"go"})
 	if err != nil {
@@ -354,10 +70,10 @@ func TestEmbeddedClientUsesEmbeddedUpstreamTemplateWithoutHTTPServer(t *testing.
 	}
 }
 
-func TestEmbeddedClientPreservesRequestedProviderOrderAcrossEmbeddedSources(t *testing.T) {
+func TestFetchTemplatePreservesRequestedProviderOrderAcrossSources(t *testing.T) {
 	t.Parallel()
 
-	client := NewEmbeddedClientWithOptions(Options{})
+	client := NewClient()
 
 	resp, err := client.FetchTemplate(context.Background(), []string{"wrangler", "go"})
 	if err != nil {
@@ -374,396 +90,23 @@ func TestEmbeddedClientPreservesRequestedProviderOrderAcrossEmbeddedSources(t *t
 	}
 }
 
-func TestFetchTemplateMergesRemoteAndEmbeddedCustomTemplates(t *testing.T) {
+func TestFetchTemplateSupportsCustomOnlySelection(t *testing.T) {
 	t.Parallel()
 
-	requestPath := ""
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"}]}`))
-		case "/templates/Go.gitignore":
-			requestPath = r.URL.Path
-			_, _ = w.Write([]byte("bin/\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"ai-agents", "go"})
+	resp, err := NewClient().FetchTemplate(context.Background(), []string{"ai-agents"})
 	if err != nil {
 		t.Fatalf("FetchTemplate failed: %v", err)
 	}
-	if requestPath != "/templates/Go.gitignore" {
-		t.Fatalf("expected remote request to include only remote providers, got %q", requestPath)
-	}
-	if !strings.Contains(resp.Content, "bin/") {
-		t.Fatalf("expected remote template content in merge: %q", resp.Content)
-	}
-	if !strings.Contains(resp.Content, ".agents/") {
-		t.Fatalf("expected embedded custom template content in merge: %q", resp.Content)
+	if !strings.Contains(resp.Content, ".agents/") || !strings.Contains(resp.Content, ".claude/") || !strings.Contains(resp.Content, ".cursor/") {
+		t.Fatalf("unexpected embedded custom template content: %q", resp.Content)
 	}
 }
 
-func TestFetchTemplateUsesSingleCatalogLookupForRemoteProviders(t *testing.T) {
+func TestFetchTemplateRejectsUnknownProvider(t *testing.T) {
 	t.Parallel()
 
-	catalogRequests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			catalogRequests++
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"}]}`))
-		case "/templates/Go.gitignore":
-			_, _ = w.Write([]byte("bin/\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"ai-agents", "go"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if catalogRequests != 1 {
-		t.Fatalf("expected one catalog request, got %d", catalogRequests)
-	}
-	if !slices.Equal(resp.AvailableProviders, []string{"go"}) {
-		t.Fatalf("unexpected available providers: %v", resp.AvailableProviders)
-	}
-}
-
-func TestFetchTemplateReusesCachedBodyOnNotModified(t *testing.T) {
-	t.Parallel()
-
-	cacheDir := t.TempDir()
-	client := NewClientWithOptions(Options{})
-	client.cacheDir = cacheDir
-	writeCachedTemplateFixture(t, client, "node", []byte("node_modules/\n"), "etag-node", time.Now().Add(-cacheFreshnessWindow-time.Hour))
-	writeCachedCatalogFixture(t, client, []byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`), "etag-catalog", time.Now())
-
-	templateRequests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			if got := r.Header.Get("If-None-Match"); got != "etag-catalog" {
-				t.Fatalf("unexpected catalog etag header: %q", got)
-			}
-			w.WriteHeader(http.StatusNotModified)
-		case "/templates/Node.gitignore":
-			templateRequests++
-			if got := r.Header.Get("If-None-Match"); got != "etag-node" {
-				t.Fatalf("unexpected template etag header: %q", got)
-			}
-			w.WriteHeader(http.StatusNotModified)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"node"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if resp.Content != "node_modules/" {
-		t.Fatalf("unexpected cached template content: %q", resp.Content)
-	}
-	if templateRequests != 1 {
-		t.Fatalf("expected one template request, got %d", templateRequests)
-	}
-	entry, err := client.readCachedTemplateEntry("node", false)
-	if err != nil {
-		t.Fatalf("read refreshed cache: %v", err)
-	}
-	if time.Since(entry.Metadata.FetchedAt) > time.Minute {
-		t.Fatalf("expected cache metadata timestamp refresh, got %s", entry.Metadata.FetchedAt)
-	}
-}
-
-func TestFetchProviderCatalogReusesCachedBodyOnNotModified(t *testing.T) {
-	t.Parallel()
-
-	client := NewClientWithOptions(Options{})
-	client.cacheDir = t.TempDir()
-	writeCachedCatalogFixture(t, client, []byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`), "etag-catalog", time.Now().Add(-cacheFreshnessWindow-time.Hour))
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("If-None-Match"); got != "etag-catalog" {
-			t.Fatalf("unexpected catalog etag header: %q", got)
-		}
-		w.WriteHeader(http.StatusNotModified)
-	}))
-	defer server.Close()
-	client.listURL = server.URL
-
-	catalog, err := client.fetchProviderCatalog(context.Background())
-	if err != nil {
-		t.Fatalf("fetchProviderCatalog failed: %v", err)
-	}
-	if !maps.Equal(catalog, map[string]string{"node": "Node.gitignore"}) {
-		t.Fatalf("unexpected catalog: %v", catalog)
-	}
-}
-
-func TestFetchTemplateMergesRemoteAndWranglerEmbeddedTemplates(t *testing.T) {
-	t.Parallel()
-
-	requestPath := ""
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"}]}`))
-		case "/templates/Go.gitignore":
-			requestPath = r.URL.Path
-			_, _ = w.Write([]byte("bin/\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"go", "wrangler"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if requestPath != "/templates/Go.gitignore" {
-		t.Fatalf("expected remote request to include only remote providers, got %q", requestPath)
-	}
-	if !strings.Contains(resp.Content, "bin/") {
-		t.Fatalf("expected remote template content in merge: %q", resp.Content)
-	}
-	if !strings.Contains(resp.Content, ".wrangler/") {
-		t.Fatalf("expected wrangler template content in merge: %q", resp.Content)
-	}
-}
-
-func TestFetchTemplateResolvesGlobalTemplatePathsAndPreservesRequestedOrder(t *testing.T) {
-	t.Parallel()
-
-	requestPaths := make([]string, 0, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Go.gitignore","type":"blob"},{"path":"Global/macOS.gitignore","type":"blob"}]}`))
-		case "/templates/Global/macOS.gitignore":
-			requestPaths = append(requestPaths, r.URL.Path)
-			_, _ = w.Write([]byte(".DS_Store\n"))
-		case "/templates/Go.gitignore":
-			requestPaths = append(requestPaths, r.URL.Path)
-			_, _ = w.Write([]byte("bin/\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"macos", "go"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if !slices.Equal(requestPaths, []string{"/templates/Global/macOS.gitignore", "/templates/Go.gitignore"}) {
-		t.Fatalf("unexpected request order: %v", requestPaths)
-	}
-	if resp.Content != ".DS_Store\n\nbin/" {
-		t.Fatalf("unexpected merged content: %q", resp.Content)
-	}
-}
-
-func TestFetchTemplateResolvesCommunityTemplatePath(t *testing.T) {
-	t.Parallel()
-
-	requestPaths := make([]string, 0, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"community/JavaScript/Vue.gitignore","type":"blob"}]}`))
-		case "/templates/community/JavaScript/Vue.gitignore":
-			requestPaths = append(requestPaths, r.URL.Path)
-			_, _ = w.Write([]byte("dist\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"javascript/vue"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if !slices.Equal(requestPaths, []string{"/templates/community/JavaScript/Vue.gitignore"}) {
-		t.Fatalf("unexpected request paths: %v", requestPaths)
-	}
-	if resp.Content != "dist" {
-		t.Fatalf("unexpected template content: %q", resp.Content)
-	}
-	if !slices.Equal(resp.AvailableProviders, []string{"javascript/vue"}) {
-		t.Fatalf("unexpected available providers: %v", resp.AvailableProviders)
-	}
-}
-
-func TestFetchTemplateResolvesGlobalCollisionUsingEmbeddedParityRules(t *testing.T) {
-	t.Parallel()
-
-	requestPaths := make([]string, 0, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"AL.gitignore","type":"blob"},{"path":"Global/AL.gitignore","type":"blob"}]}`))
-		case "/templates/AL.gitignore":
-			requestPaths = append(requestPaths, r.URL.Path)
-			_, _ = w.Write([]byte("root\n"))
-		case "/templates/Global/AL.gitignore":
-			requestPaths = append(requestPaths, r.URL.Path)
-			_, _ = w.Write([]byte("global\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	resp, err := client.FetchTemplate(context.Background(), []string{"al", "global/al"})
-	if err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if !slices.Equal(requestPaths, []string{"/templates/AL.gitignore", "/templates/Global/AL.gitignore"}) {
-		t.Fatalf("unexpected request paths: %v", requestPaths)
-	}
-	if resp.Content != "root\n\nglobal" {
-		t.Fatalf("unexpected merged content: %q", resp.Content)
-	}
-	if !slices.Equal(resp.AvailableProviders, []string{"al", "global/al"}) {
-		t.Fatalf("unexpected available providers: %v", resp.AvailableProviders)
-	}
-}
-
-func writeCachedTemplateFixture(t *testing.T, client *Client, key string, body []byte, etag string, fetchedAt time.Time) {
-	t.Helper()
-	writeCachedFixture(t, client.templateCachePath(key), client.templateMetadataPath(key), client.upstreamCommit, body, etag, fetchedAt)
-}
-
-func writeCachedCatalogFixture(t *testing.T, client *Client, body []byte, etag string, fetchedAt time.Time) {
-	t.Helper()
-	writeCachedFixture(t, client.catalogCachePath(), client.catalogMetadataPath(), client.upstreamCommit, body, etag, fetchedAt)
-}
-
-func writeCachedFixture(t *testing.T, bodyPath string, metadataPath string, upstreamCommit string, body []byte, etag string, fetchedAt time.Time) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o755); err != nil {
-		t.Fatalf("mkdir cache dir: %v", err)
-	}
-	if err := os.WriteFile(bodyPath, body, 0o644); err != nil {
-		t.Fatalf("write cache body: %v", err)
-	}
-	sum := sha256.Sum256(body)
-	metadataBytes, err := json.Marshal(cacheMetadata{
-		Version:        cacheMetadataVersion,
-		UpstreamCommit: upstreamCommit,
-		ETag:           etag,
-		FetchedAt:      fetchedAt.UTC(),
-		SHA256:         fmt.Sprintf("%x", sum),
-	})
-	if err != nil {
-		t.Fatalf("marshal cache metadata: %v", err)
-	}
-	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
-		t.Fatalf("write cache metadata: %v", err)
-	}
-}
-
-func TestResolveGitHubTokenFromEnv(t *testing.T) {
-	orig := ghAuthTokenFunc
-	ghAuthTokenFunc = func() string { return "" }
-	t.Cleanup(func() { ghAuthTokenFunc = orig })
-	t.Setenv("GITHUB_TOKEN", "")
-	t.Setenv("GITHUB_PAT", "")
-	t.Setenv("GH_TOKEN", "")
-	t.Setenv("GITHUB_API_TOKEN", "")
-	t.Setenv("GITHUB_ACCESS_TOKEN", "")
-
-	t.Run("first available wins", func(t *testing.T) {
-		t.Setenv("GITHUB_PAT", "pat-abc")
-		t.Setenv("GH_TOKEN", "gh-xyz")
-		got := resolveGitHubToken()
-		if got != "pat-abc" {
-			t.Fatalf("got %q, want pat-abc", got)
-		}
-	})
-
-	t.Run("falls through to GH_TOKEN", func(t *testing.T) {
-		t.Setenv("GITHUB_PAT", "")
-		t.Setenv("GH_TOKEN", "gh-xyz")
-		got := resolveGitHubToken()
-		if got != "gh-xyz" {
-			t.Fatalf("got %q, want gh-xyz", got)
-		}
-	})
-
-	t.Run("empty when nothing set", func(t *testing.T) {
-		got := resolveGitHubToken()
-		if got != "" {
-			t.Fatalf("got %q, want empty", got)
-		}
-	})
-}
-
-func TestFetchTemplateSendsAuthHeader(t *testing.T) {
-	orig := ghAuthTokenFunc
-	ghAuthTokenFunc = func() string { return "" }
-	t.Cleanup(func() { ghAuthTokenFunc = orig })
-
-	t.Setenv("GITHUB_TOKEN", "test-token-123")
-
-	var gotAuth string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		switch r.URL.Path {
-		case "/catalog":
-			_, _ = w.Write([]byte(`{"tree":[{"path":"Node.gitignore","type":"blob"}]}`))
-		case "/templates/Node.gitignore":
-			_, _ = w.Write([]byte("node_modules/\n"))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	client := NewClient()
-	client.listURL = server.URL + "/catalog"
-	client.templateURL = server.URL + "/templates/"
-
-	if _, err := client.FetchTemplate(context.Background(), []string{"node"}); err != nil {
-		t.Fatalf("FetchTemplate failed: %v", err)
-	}
-	if gotAuth != "Bearer test-token-123" {
-		t.Fatalf("got Authorization %q, want %q", gotAuth, "Bearer test-token-123")
+	_, err := NewClient().FetchTemplate(context.Background(), []string{"definitely-not-a-provider"})
+	if err == nil || err.Error() != "embedded upstream template not found: definitely-not-a-provider" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

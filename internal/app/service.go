@@ -8,22 +8,26 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aaronflorey/genignore/internal/api"
+	templateapi "github.com/aaronflorey/genignore/internal/api"
 	"github.com/aaronflorey/genignore/internal/customtemplate"
 	"github.com/aaronflorey/genignore/internal/gitignore"
 	"github.com/aaronflorey/genignore/internal/provider"
+	"github.com/aaronflorey/genignore/internal/rulecatalog"
 )
 
-type APIClient interface {
+// TemplateClient abstracts embedded provider catalog/template loading. The
+// concrete implementation still lives in internal/api as a compatibility
+// detail from the earlier runtime-fetching architecture.
+type TemplateClient interface {
 	AvailableProviders(ctx context.Context) ([]string, error)
-	FetchTemplate(ctx context.Context, providers []string) (api.TemplateResponse, error)
-	InspectRuntime(providers []string) api.RuntimeDiagnostics
+	FetchTemplate(ctx context.Context, providers []string) (templateapi.TemplateResponse, error)
+	InspectRuntime(providers []string) templateapi.RuntimeDiagnostics
 }
 
 type Service struct {
 	CWD       string
 	Config    Config
-	Client    APIClient
+	Client    TemplateClient
 	Manager   *gitignore.Manager
 	Detectors map[string]provider.Detector
 }
@@ -61,7 +65,7 @@ func NewService(cwd string, cfg Config) *Service {
 	return &Service{
 		CWD:       cwd,
 		Config:    cfg,
-		Client:    api.NewEmbeddedClientWithOptions(api.Options{Offline: cfg.Runtime.Offline, UpstreamCommit: cfg.Runtime.UpstreamCommit}),
+		Client:    templateapi.NewEmbeddedClientWithOptions(templateapi.Options{}),
 		Manager:   gitignore.NewManager(cwd),
 		Detectors: provider.Registry(),
 	}
@@ -96,7 +100,7 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 	if err != nil {
 		return CommandResult{}, err
 	}
-	block := gitignore.BuildManagedBlockWithMetadata(selection.FinalProviders, managedBlockMetadata(selection.FinalProviders, s.Config.Runtime.UpstreamCommit), template.Content, s.Config.Defaults.IgnoreRules)
+	block := gitignore.BuildManagedBlockWithMetadata(selection.FinalProviders, managedBlockMetadata(selection.FinalProviders), template.Content, s.Config.Defaults.IgnoreRules)
 	action, diff, err := applyManagedBlock(s.Manager, block, opts.DryRun, opts.Diff)
 	if err != nil {
 		return CommandResult{}, err
@@ -110,8 +114,6 @@ func (s *Service) Detect(ctx context.Context, opts DetectOptions) (CommandResult
 		ExcludedProviders:      selection.ExcludedProviders,
 		FinalProviders:         selection.FinalProviders,
 		UnsupportedKeyWarnings: selection.UnsupportedKeyWarnings,
-		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, selection.FinalProviders),
-		RemoteProviderWarnings: remoteWarningsFromTemplate(template),
 		DetectionResults:       selection.DetectionResults,
 		FileAction:             action,
 		PreviewOnly:            previewOnly,
@@ -245,7 +247,7 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 	if err != nil {
 		return CommandResult{}, err
 	}
-	block := gitignore.BuildManagedBlockWithMetadata(finalProviders, managedBlockMetadata(finalProviders, s.Config.Runtime.UpstreamCommit), template.Content, s.Config.Defaults.IgnoreRules)
+	block := gitignore.BuildManagedBlockWithMetadata(finalProviders, managedBlockMetadata(finalProviders), template.Content, s.Config.Defaults.IgnoreRules)
 	action, diff, err := applyManagedBlock(s.Manager, block, opts.DryRun, opts.Diff)
 	if err != nil {
 		return CommandResult{}, err
@@ -259,8 +261,6 @@ func (s *Service) Add(ctx context.Context, opts AddOptions) (CommandResult, erro
 		AddedProviders:         added,
 		FinalProviders:         finalProviders,
 		UnsupportedKeyWarnings: warnings,
-		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, finalProviders),
-		RemoteProviderWarnings: remoteWarningsFromTemplate(template),
 		FileAction:             action,
 		PreviewOnly:            previewOnly,
 		Diff:                   diff,
@@ -273,7 +273,6 @@ func (s *Service) Doctor(ctx context.Context, opts DoctorOptions) (DoctorResult,
 	if err != nil {
 		return DoctorResult{}, err
 	}
-	runtimeInfo := s.Client.InspectRuntime(selection.FinalProviders)
 
 	return DoctorResult{
 		Command:                "doctor",
@@ -283,13 +282,11 @@ func (s *Service) Doctor(ctx context.Context, opts DoctorOptions) (DoctorResult,
 		ExcludedProviders:      selection.ExcludedProviders,
 		FinalProviders:         selection.FinalProviders,
 		UnsupportedKeyWarnings: selection.UnsupportedKeyWarnings,
-		RuntimeWarnings:        runtimeWarnings(s.Config.Runtime.Offline, selection.FinalProviders),
 		Detections:             doctorDetections(selection.DetectionResults),
-		Runtime:                doctorRuntime(runtimeInfo),
-		Provenance:             managedBlockMetadata(selection.FinalProviders, s.Config.Runtime.UpstreamCommit),
+		Runtime:                doctorRuntime(selection.FinalProviders),
+		Provenance:             managedBlockMetadata(selection.FinalProviders),
 	}, nil
 }
-
 func sanitizeKeys(keys []string) ([]string, []string) {
 	set := make(map[string]struct{})
 	warnings := make([]string, 0)
@@ -315,40 +312,6 @@ func filterSupportedKeys(keys []string) []string {
 		}
 	}
 	return filtered
-}
-
-func remoteWarningsFromTemplate(template api.TemplateResponse) []string {
-	if len(template.AvailableProviders) == 0 {
-		return nil
-	}
-	return remoteDiffWarnings(makeSet(template.AvailableProviders))
-}
-
-func remoteDiffWarnings(remote map[string]struct{}) []string {
-	warnings := make([]string, 0)
-	for _, key := range provider.RemoteSupportedKeys() {
-		if _, ok := remote[key]; !ok {
-			warnings = append(warnings, fmt.Sprintf("supported provider missing remotely: %s", key))
-		}
-	}
-	slices.Sort(warnings)
-	return warnings
-}
-
-func runtimeWarnings(offline bool, providers []string) []string {
-	if !offline || !hasRemoteProviders(providers) {
-		return nil
-	}
-	return []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"}
-}
-
-func hasRemoteProviders(providers []string) bool {
-	for _, key := range providers {
-		if !customtemplate.HasProvider(key) {
-			return true
-		}
-	}
-	return false
 }
 
 func applyManagedBlock(manager *gitignore.Manager, block string, dryRun bool, previewOnly bool) (gitignore.FileAction, string, error) {
@@ -377,7 +340,7 @@ func applyManagedBlock(manager *gitignore.Manager, block string, dryRun bool, pr
 	return action, preview.Diff, nil
 }
 
-func managedBlockMetadata(providers []string, upstreamCommit string) []string {
+func managedBlockMetadata(providers []string) []string {
 	remoteProviders := make([]string, 0, len(providers))
 	embeddedProviders := make([]string, 0, len(providers))
 	for _, key := range providers {
@@ -392,11 +355,7 @@ func managedBlockMetadata(providers []string, upstreamCommit string) []string {
 
 	parts := make([]string, 0, 2)
 	if len(remoteProviders) > 0 {
-		commit := strings.TrimSpace(upstreamCommit)
-		if commit == "" {
-			commit = api.DefaultUpstreamCommit
-		}
-		parts = append(parts, fmt.Sprintf("github/gitignore@%s [%s]", commit, strings.Join(remoteProviders, ",")))
+		parts = append(parts, fmt.Sprintf("github/gitignore@%s [%s]", templateapi.DefaultUpstreamCommit, strings.Join(remoteProviders, ",")))
 	}
 	if len(embeddedProviders) > 0 {
 		parts = append(parts, fmt.Sprintf("embedded [%s]", strings.Join(embeddedProviders, ",")))
@@ -422,32 +381,45 @@ func doctorDetections(results []provider.Result) []DoctorDetection {
 	return detections
 }
 
-func doctorRuntime(runtimeInfo api.RuntimeDiagnostics) DoctorRuntime {
-	remoteProviders := slices.Clone(runtimeInfo.RemoteProviders)
-	embeddedProviders := slices.Clone(runtimeInfo.EmbeddedProviders)
-	slices.Sort(remoteProviders)
-	slices.Sort(embeddedProviders)
+func doctorRuntime(providers []string) DoctorRuntime {
+	selectedProviders := slices.Clone(providers)
+	slices.Sort(selectedProviders)
 
-	cacheEntries := make([]DoctorCacheEntry, 0, len(runtimeInfo.CacheEntries))
-	for _, entry := range runtimeInfo.CacheEntries {
-		cacheEntries = append(cacheEntries, DoctorCacheEntry{Provider: entry.Provider, State: entry.State, Detail: entry.Detail})
+	retainedCustomProviders := make([]string, 0, len(selectedProviders))
+	for _, key := range selectedProviders {
+		if customtemplate.HasProvider(key) {
+			retainedCustomProviders = append(retainedCustomProviders, key)
+		}
 	}
-	slices.SortFunc(cacheEntries, func(a, b DoctorCacheEntry) int {
-		if cmp := strings.Compare(a.Provider, b.Provider); cmp != 0 {
-			return cmp
-		}
-		if cmp := strings.Compare(a.State, b.State); cmp != 0 {
-			return cmp
-		}
-		return strings.Compare(a.Detail, b.Detail)
-	})
+
+	ruleCatalogStatus := "loaded"
+	ruleCatalogProviderCount := 0
+	if err := rulecatalog.InitError(); err != nil {
+		ruleCatalogStatus = err.Error()
+	} else {
+		ruleCatalogProviderCount = len(rulecatalog.Entries())
+	}
+
+	embeddedProviderCount := len(provider.RemoteSupportedKeys())
+	decisions := []string{
+		fmt.Sprintf("provider support is validated against the embedded github/gitignore catalog snapshot (%d providers)", embeddedProviderCount),
+	}
+	if ruleCatalogStatus == "loaded" {
+		decisions = append(decisions, fmt.Sprintf("repository detection is backed by the embedded JSON rule catalog (%d providers)", ruleCatalogProviderCount))
+	} else {
+		decisions = append(decisions, "repository detection rules are unavailable because the embedded JSON rule catalog failed to load")
+	}
+	if len(retainedCustomProviders) > 0 {
+		decisions = append(decisions, fmt.Sprintf("retained embedded custom providers: %s", strings.Join(retainedCustomProviders, ", ")))
+	}
+
 	return DoctorRuntime{
-		UpstreamCommit:    runtimeInfo.UpstreamCommit,
-		Offline:           runtimeInfo.Offline,
-		RemoteProviders:   remoteProviders,
-		EmbeddedProviders: embeddedProviders,
-		CacheEntries:      cacheEntries,
-		Decisions:         runtimeInfo.Decisions,
+		EmbeddedProviderCount:    embeddedProviderCount,
+		SelectedProviders:        selectedProviders,
+		RuleCatalogStatus:        ruleCatalogStatus,
+		RuleCatalogProviderCount: ruleCatalogProviderCount,
+		RetainedCustomProviders:  retainedCustomProviders,
+		Decisions:                decisions,
 	}
 }
 

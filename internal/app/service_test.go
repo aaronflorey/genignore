@@ -266,14 +266,13 @@ func TestAddMixedSupportedUnsupportedKeys(t *testing.T) {
 	}
 }
 
-func TestDetectReportsOfflineRuntimeWarningForRemoteProviders(t *testing.T) {
+func TestDetectDoesNotReportCacheBackedTemplateWarnings(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
 	svc := &Service{
 		CWD:     dir,
-		Config:  Config{Runtime: ConfigRuntime{Offline: true}},
 		Client:  client,
 		Manager: gitignore.NewManager(dir),
 		Detectors: map[string]provider.Detector{
@@ -281,23 +280,19 @@ func TestDetectReportsOfflineRuntimeWarningForRemoteProviders(t *testing.T) {
 		},
 	}
 
-	res, err := svc.Detect(context.Background(), DetectOptions{})
+	_, err := svc.Detect(context.Background(), DetectOptions{})
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
 	}
-	if !reflect.DeepEqual(res.RuntimeWarnings, []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"}) {
-		t.Fatalf("unexpected runtime warnings: %v", res.RuntimeWarnings)
-	}
 }
 
-func TestDetectOmitsOfflineRuntimeWarningForEmbeddedOnlyProviders(t *testing.T) {
+func TestDetectEmbeddedOnlyProvidersAvoidSourceWarnings(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	client := &fakeAPI{available: provider.SupportedKeys, template: "generated\n"}
 	svc := &Service{
 		CWD:     dir,
-		Config:  Config{Runtime: ConfigRuntime{Offline: true}},
 		Client:  client,
 		Manager: gitignore.NewManager(dir),
 		Detectors: map[string]provider.Detector{
@@ -305,52 +300,9 @@ func TestDetectOmitsOfflineRuntimeWarningForEmbeddedOnlyProviders(t *testing.T) 
 		},
 	}
 
-	res, err := svc.Detect(context.Background(), DetectOptions{})
+	_, err := svc.Detect(context.Background(), DetectOptions{})
 	if err != nil {
 		t.Fatalf("detect failed: %v", err)
-	}
-	if len(res.RuntimeWarnings) != 0 {
-		t.Fatalf("unexpected runtime warnings: %v", res.RuntimeWarnings)
-	}
-}
-
-func TestRemoteProviderDriftWarning(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	client := &fakeAPI{available: []string{"node"}, template: "node_modules/\n"}
-	svc := &Service{
-		CWD:       dir,
-		Client:    client,
-		Manager:   gitignore.NewManager(dir),
-		Detectors: map[string]provider.Detector{"node": matchedDetector("node")},
-	}
-
-	res, err := svc.Detect(context.Background(), DetectOptions{})
-	if err != nil {
-		t.Fatalf("detect failed: %v", err)
-	}
-	if len(res.RemoteProviderWarnings) == 0 {
-		t.Fatalf("expected remote provider drift warning")
-	}
-	if client.availableCalls != 0 {
-		t.Fatalf("expected detect to reuse template catalog data, got %d separate calls", client.availableCalls)
-	}
-	for _, warning := range []string{
-		"supported provider missing remotely: angular",
-		"supported provider missing remotely: go",
-	} {
-		if !containsString(res.RemoteProviderWarnings, warning) {
-			t.Fatalf("expected warning %q in %v", warning, res.RemoteProviderWarnings)
-		}
-	}
-	for _, warning := range []string{
-		"supported provider missing remotely: ai-agents",
-		"supported provider missing remotely: wrangler",
-	} {
-		if containsString(res.RemoteProviderWarnings, warning) {
-			t.Fatalf("did not expect embedded exception warning %q in %v", warning, res.RemoteProviderWarnings)
-		}
 	}
 }
 
@@ -406,9 +358,6 @@ func TestDetectKeepsMatchedProviderWhenCatalogSnapshotOmitsIt(t *testing.T) {
 	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"go"}) {
 		t.Fatalf("unexpected template requests: %v", client.requests)
 	}
-	if !containsString(res.RemoteProviderWarnings, "supported provider missing remotely: go") {
-		t.Fatalf("expected remote drift warning for omitted provider, got %v", res.RemoteProviderWarnings)
-	}
 }
 
 func TestAddKeepsExistingManagedProviderWhenCatalogSnapshotOmitsIt(t *testing.T) {
@@ -437,9 +386,6 @@ func TestAddKeepsExistingManagedProviderWhenCatalogSnapshotOmitsIt(t *testing.T)
 	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"go", "node"}) {
 		t.Fatalf("unexpected template requests: %v", client.requests)
 	}
-	if !containsString(res.RemoteProviderWarnings, "supported provider missing remotely: go") {
-		t.Fatalf("expected remote drift warning for omitted provider, got %v", res.RemoteProviderWarnings)
-	}
 }
 
 func TestDetectCustomOnlySucceedsWithoutRemoteCatalog(t *testing.T) {
@@ -467,15 +413,12 @@ func TestDetectCustomOnlySucceedsWithoutRemoteCatalog(t *testing.T) {
 	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"wrangler"}) {
 		t.Fatalf("unexpected template requests: %v", client.requests)
 	}
-	if len(res.RemoteProviderWarnings) != 0 {
-		t.Fatalf("unexpected remote warnings: %v", res.RemoteProviderWarnings)
-	}
 	if res.FileAction != gitignore.FileActionCreated {
 		t.Fatalf("unexpected file action: %s", res.FileAction)
 	}
 }
 
-func TestNewServiceUsesEmbeddedClient(t *testing.T) {
+func TestNewServiceUsesEmbeddedTemplateClient(t *testing.T) {
 	t.Parallel()
 
 	svc := NewService(t.TempDir(), Config{})
@@ -503,9 +446,6 @@ func TestAddCustomOnlySucceedsWithoutRemoteCatalog(t *testing.T) {
 	}
 	if len(client.requests) != 1 || !reflect.DeepEqual(client.requests[0], []string{"ai-agents"}) {
 		t.Fatalf("unexpected template requests: %v", client.requests)
-	}
-	if len(res.RemoteProviderWarnings) != 0 {
-		t.Fatalf("unexpected remote warnings: %v", res.RemoteProviderWarnings)
 	}
 }
 
@@ -1497,8 +1437,14 @@ func TestDetectFixtureProducesStableManagedBlockAndJSON(t *testing.T) {
 	if firstBlock != secondBlock {
 		t.Fatalf("managed block changed across repeated fixture runs\nfirst:\n%s\nsecond:\n%s", firstBlock, secondBlock)
 	}
+	assertTextContract(t, "managed_block_next_vscode_app.gitignore", firstBlock)
 	if firstJSON != secondJSON {
 		t.Fatalf("detect json changed across repeated fixture runs\nfirst:\n%s\nsecond:\n%s", firstJSON, secondJSON)
+	}
+	for _, forbidden := range []string{"remote", "cache"} {
+		if strings.Contains(strings.ToLower(firstBlock), forbidden) {
+			t.Fatalf("managed block contract contains obsolete %q wording:\n%s", forbidden, firstBlock)
+		}
 	}
 }
 
@@ -1508,14 +1454,6 @@ func TestDoctorContractLaravelJetBrainsFixture(t *testing.T) {
 	dir := copyRepoFixture(t, "laravel-jetbrains-app")
 	client := &fakeAPI{
 		available: provider.SupportedKeys,
-		runtime: api.RuntimeDiagnostics{
-			UpstreamCommit:  api.DefaultUpstreamCommit,
-			Offline:         false,
-			RemoteProviders: []string{"composer", "jetbrains", "laravel"},
-			Decisions: []string{
-				"supported providers are validated against the checked-in GitHub catalog snapshot plus embedded exceptions",
-			},
-		},
 	}
 	svc := &Service{
 		CWD:       dir,
@@ -1541,18 +1479,6 @@ func TestDoctorFixtureProducesStableJSON(t *testing.T) {
 		dir := copyRepoFixture(t, "laravel-jetbrains-app")
 		client := &fakeAPI{
 			available: provider.SupportedKeys,
-			runtime: api.RuntimeDiagnostics{
-				UpstreamCommit:  api.DefaultUpstreamCommit,
-				Offline:         false,
-				RemoteProviders: []string{"laravel", "composer", "jetbrains"},
-				CacheEntries: []api.CacheEntryStatus{
-					{Provider: "laravel", State: "fresh"},
-					{Provider: "composer", State: "stale", Detail: "etag mismatch"},
-				},
-				Decisions: []string{
-					"supported providers are validated against the checked-in GitHub catalog snapshot plus embedded exceptions",
-				},
-			},
 		}
 		svc := &Service{
 			CWD:       dir,
@@ -1574,6 +1500,11 @@ func TestDoctorFixtureProducesStableJSON(t *testing.T) {
 
 	if first != second {
 		t.Fatalf("doctor json changed across repeated fixture runs\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+	for _, forbidden := range []string{"remote", "cache"} {
+		if strings.Contains(strings.ToLower(first), forbidden) {
+			t.Fatalf("doctor contract contains obsolete %q wording:\n%s", forbidden, first)
+		}
 	}
 }
 
@@ -1623,6 +1554,11 @@ func fixtureDetectors(keys ...string) map[string]provider.Detector {
 func assertJSONContract(t *testing.T, contractName string, value any) {
 	t.Helper()
 	got := marshalContractJSON(t, value)
+	assertTextContract(t, contractName, got)
+}
+
+func assertTextContract(t *testing.T, contractName string, got string) {
+	t.Helper()
 	want, err := os.ReadFile(filepath.Join(repoRoot(t), "testdata", "contracts", contractName))
 	if err != nil {
 		t.Fatalf("read contract %s: %v", contractName, err)

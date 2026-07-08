@@ -189,6 +189,8 @@ func isGeneratedSourceComment(line string) bool {
 		return false
 	}
 
+	// Retain historical source-comment stripping so reruns can clean up managed
+	// blocks produced by older runtime-backed integrations.
 	return strings.HasPrefix(trimmed, "# Created by https://www.toptal.com/developers/gitignore/api/") ||
 		strings.HasPrefix(trimmed, "# Edit at https://www.toptal.com/developers/gitignore?templates=") ||
 		strings.HasPrefix(trimmed, "# End of https://www.toptal.com/developers/gitignore/api/") ||

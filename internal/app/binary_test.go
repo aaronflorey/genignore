@@ -2,10 +2,9 @@ package app
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,7 +12,6 @@ import (
 	"runtime"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/aaronflorey/genignore/internal/api"
 	"github.com/aaronflorey/genignore/internal/gitignore"
@@ -24,7 +22,7 @@ func TestCompiledBinaryDetectDryRunJSON(t *testing.T) {
 
 	binaryPath := buildCompiledBinary(t)
 	repoDir := copyRepoFixture(t, "node-app")
-	homeDir := prepareOfflineHome(t, map[string]string{"node": "node_modules/\n"})
+	homeDir := prepareHome(t)
 
 	result := runCompiledBinary(t, binaryPath, repoDir, homeDir, "detect", "--dry-run", "--exclude", "linux,macos,windows", "--json")
 	if result.exitCode != 0 {
@@ -61,6 +59,7 @@ func TestCompiledBinaryDetectDryRunJSON(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repoDir, ".gitignore")); !os.IsNotExist(err) {
 		t.Fatalf("expected dry-run to avoid writing .gitignore")
 	}
+	assertNoRuntimeCacheWrites(t, homeDir)
 }
 
 func TestCompiledBinaryAddUpdatesManagedBlock(t *testing.T) {
@@ -68,10 +67,7 @@ func TestCompiledBinaryAddUpdatesManagedBlock(t *testing.T) {
 
 	binaryPath := buildCompiledBinary(t)
 	repoDir := copyRepoFixture(t, "managed-node")
-	homeDir := prepareOfflineHome(t, map[string]string{
-		"go":   "bin/\n",
-		"node": "node_modules/\n",
-	})
+	homeDir := prepareHome(t)
 
 	result := runCompiledBinary(t, binaryPath, repoDir, homeDir, "add", "go")
 	if result.exitCode != 0 {
@@ -90,14 +86,19 @@ func TestCompiledBinaryAddUpdatesManagedBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
+	template, err := api.NewClient().FetchTemplate(context.Background(), []string{"go", "node"})
+	if err != nil {
+		t.Fatalf("build expected template: %v", err)
+	}
 	expected := gitignore.BuildManagedBlockWithMetadata(
 		[]string{"go", "node"},
 		[]string{"# Provenance: github/gitignore@" + api.DefaultUpstreamCommit + " [go,node]"},
-		"bin/\n\nnode_modules/\n",
+		template.Content,
 	) + "# user rule\ncoverage.out\n"
 	if string(content) != expected {
 		t.Fatalf("unexpected .gitignore contents\nwant:\n%s\n got:\n%s", expected, string(content))
 	}
+	assertNoRuntimeCacheWrites(t, homeDir)
 }
 
 func TestCompiledBinaryListJSON(t *testing.T) {
@@ -105,7 +106,7 @@ func TestCompiledBinaryListJSON(t *testing.T) {
 
 	binaryPath := buildCompiledBinary(t)
 	repoDir := copyRepoFixture(t, "node-app")
-	homeDir := prepareOfflineHome(t, nil)
+	homeDir := prepareHome(t)
 
 	result := runCompiledBinary(t, binaryPath, repoDir, homeDir, "list", "--json")
 	if result.exitCode != 0 {
@@ -130,6 +131,7 @@ func TestCompiledBinaryListJSON(t *testing.T) {
 			t.Fatalf("expected provider %q in %v", key, payload.Providers)
 		}
 	}
+	assertNoRuntimeCacheWrites(t, homeDir)
 }
 
 type compiledRunResult struct {
@@ -160,53 +162,26 @@ func copyRepoFixture(t *testing.T, name string) string {
 	return dst
 }
 
-func prepareOfflineHome(t *testing.T, templates map[string]string) string {
+func prepareHome(t *testing.T) string {
 	t.Helper()
 
 	homeDir := t.TempDir()
-	configPath := filepath.Join(homeDir, ".config", "genignore", "config.toml")
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("mkdir config dir: %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte("[runtime]\noffline = true\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
 	cacheHome := filepath.Join(homeDir, ".cache")
-	for key, content := range templates {
-		path := filepath.Join(cacheHome, "genignore", "github-gitignore", "templates", key+".gitignore")
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("mkdir cache dir: %v", err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatalf("write cache template: %v", err)
-		}
-		writeTemplateMetadata(t, cacheHome, key, []byte(content))
+	if err := os.MkdirAll(cacheHome, 0o755); err != nil {
+		t.Fatalf("mkdir cache home: %v", err)
 	}
-	if osProvider := runtimeProviderKey(); osProvider != "" {
-		if _, ok := templates[osProvider]; !ok {
-			path := filepath.Join(cacheHome, "genignore", "github-gitignore", "templates", osProvider+".gitignore")
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				t.Fatalf("mkdir cache dir: %v", err)
-			}
-			if err := os.WriteFile(path, nil, 0o644); err != nil {
-				t.Fatalf("write os cache template: %v", err)
-			}
-			writeTemplateMetadata(t, cacheHome, osProvider, nil)
-		}
-	}
-
 	return homeDir
 }
 
-func writeTemplateMetadata(t *testing.T, cacheHome string, key string, body []byte) {
+func assertNoRuntimeCacheWrites(t *testing.T, homeDir string) {
 	t.Helper()
 
-	metadataPath := filepath.Join(cacheHome, "genignore", "github-gitignore", "templates", key+".metadata.json")
-	sum := sha256.Sum256(body)
-	metadata := fmt.Sprintf("{\"version\":1,\"upstream_commit\":%q,\"fetched_at\":%q,\"sha256\":%q}", api.DefaultUpstreamCommit, time.Now().UTC().Format(time.RFC3339Nano), fmt.Sprintf("%x", sum))
-	if err := os.WriteFile(metadataPath, []byte(metadata), 0o644); err != nil {
-		t.Fatalf("write cache metadata: %v", err)
+	entries, err := os.ReadDir(filepath.Join(homeDir, ".cache"))
+	if err != nil {
+		t.Fatalf("read cache home: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected runtime path to avoid cache writes, found %d cache entries", len(entries))
 	}
 }
 

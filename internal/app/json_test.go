@@ -21,8 +21,6 @@ func TestJSONDetectCommandContract(t *testing.T) {
 			ExcludedProviders:      []string{"python"},
 			FinalProviders:         []string{"go", "node", "react"},
 			UnsupportedKeyWarnings: []string{"unsupported provider key: bad"},
-			RuntimeWarnings:        []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"},
-			RemoteProviderWarnings: []string{"supported provider missing remotely: android"},
 			DetectionResults: []provider.Result{
 				{Key: "go", Matched: true, Reason: "found go.mod", Evidence: "/tmp/project/go.mod"},
 				{Key: "node", Matched: true, Reason: "found package.json", Evidence: "/tmp/project/package.json"},
@@ -64,12 +62,6 @@ func TestJSONDetectCommandContract(t *testing.T) {
 	}
 	if !slices.Equal(payload.UnsupportedKeyWarnings, []string{"unsupported provider key: bad"}) {
 		t.Fatalf("unexpected unsupported warnings: %v", payload.UnsupportedKeyWarnings)
-	}
-	if !slices.Equal(payload.RuntimeWarnings, []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"}) {
-		t.Fatalf("unexpected runtime warnings: %v", payload.RuntimeWarnings)
-	}
-	if !slices.Equal(payload.RemoteProviderWarnings, []string{"supported provider missing remotely: android"}) {
-		t.Fatalf("unexpected remote warnings: %v", payload.RemoteProviderWarnings)
 	}
 	if len(payload.DetectionResults) != 2 || payload.DetectionResults[0].Key != "go" || payload.DetectionResults[1].Key != "node" {
 		t.Fatalf("unexpected detection results: %+v", payload.DetectionResults)
@@ -146,11 +138,14 @@ func TestJSONDoctorCommandContract(t *testing.T) {
 			FinalProviders:    []string{"go", "node"},
 			Detections:        []DoctorDetection{{Key: "go", Matched: true, Origin: "repository", Reason: "found go.mod", Evidence: "/tmp/project/go.mod"}},
 			Runtime: DoctorRuntime{
-				UpstreamCommit:  "abc123",
-				Offline:         true,
-				RemoteProviders: []string{"go", "node"},
-				CacheEntries:    []DoctorCacheEntry{{Provider: "go", State: "fresh"}},
-				Decisions:       []string{"runtime.offline is enabled, so remote templates must come from the local cache without a live GitHub refresh"},
+				EmbeddedProviderCount:    274,
+				SelectedProviders:        []string{"go", "node"},
+				RuleCatalogStatus:        "loaded",
+				RuleCatalogProviderCount: 19,
+				Decisions: []string{
+					"provider support is validated against the embedded github/gitignore catalog snapshot (274 providers)",
+					"repository detection is backed by the embedded JSON rule catalog (19 providers)",
+				},
 			},
 			Provenance: []string{"# Provenance: github/gitignore@abc123 [go,node]"},
 		}}
@@ -175,8 +170,11 @@ func TestJSONDoctorCommandContract(t *testing.T) {
 	if len(payload.Detections) != 1 || payload.Detections[0].Origin != "repository" {
 		t.Fatalf("unexpected detections: %+v", payload.Detections)
 	}
-	if payload.Runtime.UpstreamCommit != "abc123" || !payload.Runtime.Offline {
+	if payload.Runtime.EmbeddedProviderCount != 274 || payload.Runtime.RuleCatalogStatus != "loaded" || payload.Runtime.RuleCatalogProviderCount != 19 {
 		t.Fatalf("unexpected runtime payload: %+v", payload.Runtime)
+	}
+	if !slices.Equal(payload.Runtime.SelectedProviders, []string{"go", "node"}) {
+		t.Fatalf("unexpected selected providers: %+v", payload.Runtime.SelectedProviders)
 	}
 	if len(payload.Provenance) != 1 || !strings.Contains(payload.Provenance[0], "github/gitignore@abc123") {
 		t.Fatalf("unexpected provenance payload: %+v", payload.Provenance)
@@ -195,8 +193,6 @@ func TestJSONAddCommandContractOmitsDetectOnlyFields(t *testing.T) {
 			AddedProviders:         []string{"go"},
 			FinalProviders:         []string{"go", "node"},
 			UnsupportedKeyWarnings: []string{"unsupported provider key: bad", "unsupported provider key: unknown"},
-			RuntimeWarnings:        []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"},
-			RemoteProviderWarnings: []string{"supported provider missing remotely: android", "supported provider missing remotely: angular"},
 			FileAction:             gitignore.FileActionUpdated,
 			TemplateProviderCount:  2,
 		}}
@@ -236,12 +232,6 @@ func TestJSONAddCommandContractOmitsDetectOnlyFields(t *testing.T) {
 	}
 	if !slices.Equal(result.UnsupportedKeyWarnings, []string{"unsupported provider key: bad", "unsupported provider key: unknown"}) {
 		t.Fatalf("unexpected unsupported warnings: %v", result.UnsupportedKeyWarnings)
-	}
-	if !slices.Equal(result.RuntimeWarnings, []string{"runtime.offline is enabled; remote templates were loaded from the local cache without a live GitHub refresh"}) {
-		t.Fatalf("unexpected runtime warnings: %v", result.RuntimeWarnings)
-	}
-	if !slices.Equal(result.RemoteProviderWarnings, []string{"supported provider missing remotely: android", "supported provider missing remotely: angular"}) {
-		t.Fatalf("unexpected remote warnings: %v", result.RemoteProviderWarnings)
 	}
 	if result.FileAction != gitignore.FileActionUpdated || result.TemplateProviderCount != 2 {
 		t.Fatalf("unexpected add payload result: %+v", result)

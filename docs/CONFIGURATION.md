@@ -8,7 +8,7 @@ No project-specific environment variables are defined in this repository (no `.e
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| _None_ | N/A | N/A | Runtime configuration is loaded from a TOML file in the user home directory. |
+| _None_ | N/A | N/A | Configuration is loaded from a TOML file in the user home directory. |
 
 ## Config file format
 
@@ -21,24 +21,19 @@ Supported shape:
 - Top-level table: `defaults`
 - `defaults.providers` (`[]string`): default provider keys used by `detect` when `--include` is not set
 - `defaults.ignore_rules` (`[]string`): extra ignore rules appended into the managed block
-- Top-level table: `runtime`
-- `runtime.offline` (`bool`): when `true`, skip live GitHub template refreshes and require cached remote template content for remote providers
-
 Minimal working example:
 
 ```toml
 [defaults]
 providers = ["go", "node"]
 ignore_rules = [".direnv/", "coverage.out"]
-
-[runtime]
-offline = true
 ```
 
 Validation behavior:
 
 - Unknown fields are rejected (`toml.Decoder.DisallowUnknownFields()` in `LoadConfig`).
 - If the file is missing, config loading returns an empty config (not an error).
+- Unsupported historical tables such as `[runtime]` now fail strict decoding instead of being ignored.
 
 ## Required vs optional settings
 
@@ -47,7 +42,6 @@ All settings are optional.
 - Config file path (`$HOME/.config/genignore/config.toml`): optional.
 - `defaults.providers`: optional.
 - `defaults.ignore_rules`: optional.
-- `runtime.offline`: optional.
 
 Startup fails only when:
 
@@ -64,18 +58,17 @@ When no config file is present, `LoadConfig()` returns the zero-value `Config` (
 | --- | --- | --- | --- |
 | `defaults.providers` | Optional | `[]` | Used by `Detect` only when `--include` is omitted (`internal/app/service.go`). |
 | `defaults.ignore_rules` | Optional | `[]` | Passed into managed-block generation as extra rules (`internal/app/service.go`). |
-| `runtime.offline` | Optional | `false` | Reuses cached remote templates and skips live GitHub refreshes for remote providers (`internal/api/client.go`). |
 
 Independent of config file values, managed block normalization always enforces these env rules: `.env`, `.env.*`, `!.env.example`, and `!.env.ci` (`requiredEnvRules` in `internal/gitignore/manager.go`).
 
 ## Runtime source behavior
 
-Supported-provider validation comes from the checked-in GitHub catalog snapshot shipped with the binary, plus the embedded `ai-agents` and `wrangler` templates.
+Supported-provider validation comes from the embedded `github/gitignore` catalog snapshot shipped with the binary, plus the embedded `ai-agents` and `wrangler` templates.
 
-- Normal online runs fetch remote template bodies from `github/gitignore` and refresh the local template cache.
-- `runtime.offline = true` skips the live GitHub fetch and reuses cached remote template bodies instead.
-- Offline runs fail clearly when a required cached remote template is missing.
-- Remote upstream drift is surfaced through command warnings instead of silently changing the local supported-provider contract.
+- Template bodies are loaded from checked-in embedded content during normal command execution.
+- Repository-backed detectors use the embedded JSON rule catalog in `internal/rulecatalog/rules.json`.
+- `doctor` reports embedded provider counts, rule-catalog status, retained custom providers, and provenance decisions for the current selection.
+- Managed-block provenance records the embedded upstream commit for upstream-backed providers and `embedded [...]` for custom providers.
 
 ## Per-environment overrides
 

@@ -218,7 +218,6 @@ func TestAddDefaultCommandOutputShowsWarningsAndFileAction(t *testing.T) {
 			AddedProviders:         []string{"go"},
 			FinalProviders:         []string{"go", "node"},
 			UnsupportedKeyWarnings: []string{"unsupported provider key: bad", "unsupported provider key: unknown"},
-			RemoteProviderWarnings: []string{"supported provider missing remotely: android", "supported provider missing remotely: angular"},
 			FileAction:             gitignore.FileActionUpdated,
 		}}
 	}
@@ -237,8 +236,6 @@ func TestAddDefaultCommandOutputShowsWarningsAndFileAction(t *testing.T) {
 		"Final: go, node",
 		"Warning: unsupported provider key: bad",
 		"Warning: unsupported provider key: unknown",
-		"Warning: supported provider missing remotely: android",
-		"Warning: supported provider missing remotely: angular",
 		"File: updated",
 	} {
 		if !strings.Contains(stdout, fragment) {
@@ -247,12 +244,6 @@ func TestAddDefaultCommandOutputShowsWarningsAndFileAction(t *testing.T) {
 	}
 	if strings.Index(stdout, "Warning: unsupported provider key: bad") > strings.Index(stdout, "Warning: unsupported provider key: unknown") {
 		t.Fatalf("unsupported warnings out of order: %s", stdout)
-	}
-	if strings.Index(stdout, "Warning: unsupported provider key: unknown") > strings.Index(stdout, "Warning: supported provider missing remotely: android") {
-		t.Fatalf("warning groups out of order: %s", stdout)
-	}
-	if strings.Index(stdout, "Warning: supported provider missing remotely: android") > strings.Index(stdout, "Warning: supported provider missing remotely: angular") {
-		t.Fatalf("remote warnings out of order: %s", stdout)
 	}
 	if strings.Contains(stdout, "Detected:") || strings.Contains(stdout, "Included:") || strings.Contains(stdout, "Excluded:") {
 		t.Fatalf("output included empty sections: %s", stdout)
@@ -348,11 +339,14 @@ func TestDoctorCommandOutputShowsDiagnostics(t *testing.T) {
 				{Key: "macos", Origin: "host", Matched: true, Reason: "matched runtime OS", Evidence: "darwin"},
 			},
 			Runtime: DoctorRuntime{
-				Offline:         true,
-				UpstreamCommit:  "abc123",
-				RemoteProviders: []string{"go", "node"},
-				CacheEntries:    []DoctorCacheEntry{{Provider: "go", State: "fresh"}},
-				Decisions:       []string{"runtime.offline is enabled, so remote templates must come from the local cache without a live GitHub refresh"},
+				EmbeddedProviderCount:    274,
+				SelectedProviders:        []string{"go", "node"},
+				RuleCatalogStatus:        "loaded",
+				RuleCatalogProviderCount: 19,
+				Decisions: []string{
+					"provider support is validated against the embedded github/gitignore catalog snapshot (274 providers)",
+					"repository detection is backed by the embedded JSON rule catalog (19 providers)",
+				},
 			},
 			Provenance: []string{"# Provenance: github/gitignore@abc123 [go,node]"},
 		}}
@@ -366,7 +360,7 @@ func TestDoctorCommandOutputShowsDiagnostics(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("unexpected stderr: %s", stderr)
 	}
-	for _, fragment := range []string{"Command: doctor", "Detected: go, node", "Detection: go | repository | matched | found go.mod | /tmp/project/go.mod", "Detection: macos | host | matched | matched runtime OS | darwin", "Offline: true", "Upstream: abc123", "Cache: go | fresh", "Decision: runtime.offline is enabled", "Provenance: github/gitignore@abc123 [go,node]"} {
+	for _, fragment := range []string{"Command: doctor", "Detected: go, node", "Detection: go | repository | matched | found go.mod | /tmp/project/go.mod", "Detection: macos | host | matched | matched runtime OS | darwin", "Embedded catalog providers: 274", "Selected providers: go, node", "Rule catalog: loaded (19 providers)", "Decision: provider support is validated against the embedded github/gitignore catalog snapshot (274 providers)", "Decision: repository detection is backed by the embedded JSON rule catalog (19 providers)", "Provenance: github/gitignore@abc123 [go,node]"} {
 		if !strings.Contains(stdout, fragment) {
 			t.Fatalf("missing %q in stdout: %s", fragment, stdout)
 		}

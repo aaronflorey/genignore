@@ -14,11 +14,16 @@ type providerCatalog interface {
 	AvailableProviders(ctx context.Context) ([]string, error)
 }
 
-func ListProviders(ctx context.Context, client providerCatalog) ([]string, error) {
+// ListProviders keeps the catalog client parameter for command-layer
+// compatibility, but provider discovery now comes from embedded catalogs rather
+// than a runtime backend.
+func ListProviders(_ context.Context, _ providerCatalog) ([]string, error) {
 	return supportedProviders()
 }
 
-func SearchProviders(ctx context.Context, client providerCatalog, term string) ([]string, error) {
+// SearchProviders keeps the catalog client parameter for command-layer
+// compatibility, but searches the embedded provider set directly.
+func SearchProviders(_ context.Context, _ providerCatalog, term string) ([]string, error) {
 	providers, err := supportedProviders()
 	if err != nil {
 		return nil, err

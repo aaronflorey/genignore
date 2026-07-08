@@ -271,12 +271,6 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 		for _, warning := range result.UnsupportedKeyWarnings {
 			fmt.Printf("%s %s\n", "Warning:", warning)
 		}
-		for _, warning := range result.RuntimeWarnings {
-			fmt.Printf("%s %s\n", "Warning:", warning)
-		}
-		for _, warning := range result.RemoteProviderWarnings {
-			fmt.Printf("%s %s\n", "Warning:", warning)
-		}
 		if result.FileAction != "" {
 			fmt.Printf("%s %s\n", "File:", result.FileAction)
 		}
@@ -296,12 +290,6 @@ func printResult(result CommandResult, jsonOutput bool, verbose bool) {
 	}
 	fmt.Printf("%s %s\n", "Final:", formatProviderList(result.FinalProviders))
 	for _, warning := range result.UnsupportedKeyWarnings {
-		fmt.Printf("%s %s\n", "Warning:", warning)
-	}
-	for _, warning := range result.RuntimeWarnings {
-		fmt.Printf("%s %s\n", "Warning:", warning)
-	}
-	for _, warning := range result.RemoteProviderWarnings {
 		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
 	if verbose {
@@ -343,28 +331,17 @@ func printDoctorResult(result DoctorResult, jsonOutput bool) {
 	for _, warning := range result.UnsupportedKeyWarnings {
 		fmt.Printf("%s %s\n", "Warning:", warning)
 	}
-	for _, warning := range result.RuntimeWarnings {
-		fmt.Printf("%s %s\n", "Warning:", warning)
-	}
-	for _, warning := range result.RemoteProviderWarnings {
-		fmt.Printf("%s %s\n", "Warning:", warning)
-	}
 	for _, detection := range result.Detections {
 		if !detection.Matched && detection.Error == "" {
 			continue
 		}
 		fmt.Printf("%s %s\n", "Detection:", formatDoctorDetection(detection))
 	}
-	fmt.Printf("%s %t\n", "Offline:", result.Runtime.Offline)
-	fmt.Printf("%s %s\n", "Upstream:", result.Runtime.UpstreamCommit)
-	if len(result.Runtime.RemoteProviders) > 0 {
-		fmt.Printf("%s %s\n", "Remote:", formatProviderList(result.Runtime.RemoteProviders))
-	}
-	if len(result.Runtime.EmbeddedProviders) > 0 {
-		fmt.Printf("%s %s\n", "Embedded:", formatProviderList(result.Runtime.EmbeddedProviders))
-	}
-	for _, entry := range result.Runtime.CacheEntries {
-		fmt.Printf("%s %s\n", "Cache:", formatDoctorCacheEntry(entry))
+	fmt.Printf("%s %d\n", "Embedded catalog providers:", result.Runtime.EmbeddedProviderCount)
+	fmt.Printf("%s %s\n", "Selected providers:", formatProviderList(result.Runtime.SelectedProviders))
+	fmt.Printf("%s %s (%d providers)\n", "Rule catalog:", result.Runtime.RuleCatalogStatus, result.Runtime.RuleCatalogProviderCount)
+	if len(result.Runtime.RetainedCustomProviders) > 0 {
+		fmt.Printf("%s %s\n", "Retained custom providers:", formatProviderList(result.Runtime.RetainedCustomProviders))
 	}
 	for _, decision := range result.Runtime.Decisions {
 		fmt.Printf("%s %s\n", "Decision:", decision)
@@ -416,14 +393,6 @@ func formatDoctorDetection(result DoctorDetection) string {
 	}
 	if result.Error != "" {
 		parts = append(parts, result.Error)
-	}
-	return strings.Join(parts, " | ")
-}
-
-func formatDoctorCacheEntry(entry DoctorCacheEntry) string {
-	parts := []string{entry.Provider, entry.State}
-	if entry.Detail != "" {
-		parts = append(parts, entry.Detail)
 	}
 	return strings.Join(parts, " | ")
 }

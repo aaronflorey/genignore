@@ -15,8 +15,6 @@ type CommandResult struct {
 	AddedProviders         []string             `json:"addedProviders,omitempty"`
 	FinalProviders         []string             `json:"finalProviders"`
 	UnsupportedKeyWarnings []string             `json:"unsupportedKeyWarnings,omitempty"`
-	RuntimeWarnings        []string             `json:"runtimeWarnings,omitempty"`
-	RemoteProviderWarnings []string             `json:"remoteProviderWarnings,omitempty"`
 	DetectionResults       []provider.Result    `json:"detectionResults,omitempty"`
 	FileAction             gitignore.FileAction `json:"fileAction"`
 	PreviewOnly            bool                 `json:"previewOnly,omitempty"`
@@ -42,14 +40,13 @@ type ResolveResult struct {
 }
 
 type TargetResult struct {
-	Path                   string               `json:"path"`
-	DetectedProviders      []string             `json:"detectedProviders,omitempty"`
-	FinalProviders         []string             `json:"finalProviders"`
-	DetectionResults       []provider.Result    `json:"detectionResults,omitempty"`
-	RemoteProviderWarnings []string             `json:"-"`
-	FileAction             gitignore.FileAction `json:"fileAction"`
-	Diff                   string               `json:"-"`
-	TemplateProviderCount  int                  `json:"templateProviderCount"`
+	Path                  string               `json:"path"`
+	DetectedProviders     []string             `json:"detectedProviders,omitempty"`
+	FinalProviders        []string             `json:"finalProviders"`
+	DetectionResults      []provider.Result    `json:"detectionResults,omitempty"`
+	FileAction            gitignore.FileAction `json:"fileAction"`
+	Diff                  string               `json:"-"`
+	TemplateProviderCount int                  `json:"templateProviderCount"`
 }
 
 type DoctorOptions struct {
@@ -65,8 +62,6 @@ type DoctorResult struct {
 	ExcludedProviders      []string          `json:"excludedProviders,omitempty"`
 	FinalProviders         []string          `json:"finalProviders"`
 	UnsupportedKeyWarnings []string          `json:"unsupportedKeyWarnings,omitempty"`
-	RuntimeWarnings        []string          `json:"runtimeWarnings,omitempty"`
-	RemoteProviderWarnings []string          `json:"remoteProviderWarnings,omitempty"`
 	Detections             []DoctorDetection `json:"detections,omitempty"`
 	Runtime                DoctorRuntime     `json:"runtime"`
 	Provenance             []string          `json:"provenance,omitempty"`
@@ -82,16 +77,10 @@ type DoctorDetection struct {
 }
 
 type DoctorRuntime struct {
-	UpstreamCommit    string             `json:"upstreamCommit"`
-	Offline           bool               `json:"offline"`
-	RemoteProviders   []string           `json:"remoteProviders,omitempty"`
-	EmbeddedProviders []string           `json:"embeddedProviders,omitempty"`
-	CacheEntries      []DoctorCacheEntry `json:"cacheEntries,omitempty"`
-	Decisions         []string           `json:"decisions,omitempty"`
-}
-
-type DoctorCacheEntry struct {
-	Provider string `json:"provider"`
-	State    string `json:"state"`
-	Detail   string `json:"detail,omitempty"`
+	EmbeddedProviderCount    int      `json:"embeddedProviderCount"`
+	SelectedProviders        []string `json:"selectedProviders,omitempty"`
+	RuleCatalogStatus        string   `json:"ruleCatalogStatus"`
+	RuleCatalogProviderCount int      `json:"ruleCatalogProviderCount"`
+	RetainedCustomProviders  []string `json:"retainedCustomProviders,omitempty"`
+	Decisions                []string `json:"decisions,omitempty"`
 }

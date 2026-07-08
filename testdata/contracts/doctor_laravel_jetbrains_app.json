@@ -35,15 +35,17 @@
     }
   ],
   "runtime": {
-    "upstreamCommit": "dcc0fc7bc2b5ba480cf117ad1be31bafceeaff46",
-    "offline": false,
-    "remoteProviders": [
+    "embeddedProviderCount": 274,
+    "selectedProviders": [
       "composer",
       "jetbrains",
       "laravel"
     ],
+    "ruleCatalogStatus": "loaded",
+    "ruleCatalogProviderCount": 19,
     "decisions": [
-      "supported providers are validated against the checked-in GitHub catalog snapshot plus embedded exceptions"
+      "provider support is validated against the embedded github/gitignore catalog snapshot (274 providers)",
+      "repository detection is backed by the embedded JSON rule catalog (19 providers)"
     ]
   },
   "provenance": [
