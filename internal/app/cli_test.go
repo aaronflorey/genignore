@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -86,6 +87,31 @@ func (s stubCatalogClient) AvailableProviders(_ context.Context) ([]string, erro
 		return nil, s.err
 	}
 	return append([]string(nil), s.providers...), nil
+}
+
+func fixtureCommandService(detectorKeys ...string) func(string, Config) commandService {
+	return func(cwd string, cfg Config) commandService {
+		svc := NewService(cwd, cfg)
+		svc.Detectors = fixtureDetectors(detectorKeys...)
+		return svc
+	}
+}
+
+func assertJSONContractFromRoot(t *testing.T, root string, contractName string, value any) {
+	t.Helper()
+	got := marshalContractJSON(t, value)
+	assertTextContractFromRoot(t, root, contractName, got)
+}
+
+func assertTextContractFromRoot(t *testing.T, root string, contractName string, got string) {
+	t.Helper()
+	want, err := os.ReadFile(filepath.Join(root, "testdata", "contracts", contractName))
+	if err != nil {
+		t.Fatalf("read contract %s: %v", contractName, err)
+	}
+	if string(want) != got {
+		t.Fatalf("contract mismatch for %s\nwant:\n%s\n got:\n%s", contractName, string(want), got)
+	}
 }
 
 func TestListCommand(t *testing.T) {
@@ -432,6 +458,120 @@ func TestDetectVerboseCommandShowsEvidence(t *testing.T) {
 	}
 }
 
+func TestDetectCommandFixtureGeneratesEmbeddedTemplateWithoutCache(t *testing.T) {
+	repoDir := copyRepoFixture(t, "node-app")
+	homeDir := prepareHome(t)
+
+	exitCode, stdout, stderr := captureRunOutputInDirWithHome(t, []string{"detect", "--exclude", "linux,macos,windows"}, repoDir, homeDir)
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	for _, fragment := range []string{"Command: detect", "Detected:", "Final: node", "File: created"} {
+		if !strings.Contains(stdout, fragment) {
+			t.Fatalf("missing %q in stdout: %s", fragment, stdout)
+		}
+	}
+	if !strings.Contains(stdout, "node") {
+		t.Fatalf("expected detected providers to mention node: %s", stdout)
+	}
+
+	content, err := os.ReadFile(filepath.Join(repoDir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	if !strings.Contains(string(content), "node_modules/") {
+		t.Fatalf("expected embedded node template content in .gitignore: %q", string(content))
+	}
+	assertNoRuntimeCacheWrites(t, homeDir)
+}
+
+func TestDetectDiffJSONContractNextVSCodeFixture(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = fixtureCommandService("jetbrains", "nextjs", "node", "react", "visualstudiocode")
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	root := repoRoot(t)
+	repoDir := copyRepoFixture(t, "next-vscode-app")
+	homeDir := prepareHome(t)
+
+	exitCode, stdout, stderr := captureRunOutputInDirWithHome(t, []string{"detect", "--diff", "--json"}, repoDir, homeDir)
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("expected diff preview to avoid writing .gitignore")
+	}
+
+	var payload CommandResult
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("invalid json output: %v", err)
+	}
+	assertJSONContractFromRoot(t, root, "detect_diff_next_vscode_app.json", normalizeCommandResultContract(payload, repoDir))
+	assertNoRuntimeCacheWrites(t, homeDir)
+}
+
+func TestResolveJSONContractNextVSCodeFixture(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = fixtureCommandService("jetbrains", "nextjs", "node", "react", "visualstudiocode")
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	root := repoRoot(t)
+	repoDir := copyRepoFixture(t, "next-vscode-app")
+	homeDir := prepareHome(t)
+
+	exitCode, stdout, stderr := captureRunOutputInDirWithHome(t, []string{"resolve", "--json"}, repoDir, homeDir)
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("expected resolve to avoid writing .gitignore")
+	}
+
+	var payload ResolveResult
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("invalid json output: %v", err)
+	}
+	assertJSONContractFromRoot(t, root, "resolve_next_vscode_app.json", normalizeResolveResultContract(payload, repoDir))
+	assertNoRuntimeCacheWrites(t, homeDir)
+}
+
+func TestDoctorJSONContractLaravelJetBrainsFixture(t *testing.T) {
+	oldFactory := newCommandService
+	newCommandService = fixtureCommandService("composer", "jetbrains", "laravel")
+	t.Cleanup(func() { newCommandService = oldFactory })
+
+	root := repoRoot(t)
+	repoDir := copyRepoFixture(t, "laravel-jetbrains-app")
+	homeDir := prepareHome(t)
+
+	exitCode, stdout, stderr := captureRunOutputInDirWithHome(t, []string{"doctor", "--json"}, repoDir, homeDir)
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s", exitCode, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("unexpected stderr: %s", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("expected doctor to avoid writing .gitignore")
+	}
+
+	var payload DoctorResult
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("invalid json output: %v", err)
+	}
+	assertJSONContractFromRoot(t, root, "doctor_laravel_jetbrains_app.json", normalizeDoctorResultContract(payload, repoDir))
+	assertNoRuntimeCacheWrites(t, homeDir)
+}
+
 func TestDetectCommandFailureReturnsNonZero(t *testing.T) {
 	oldFactory := newCommandService
 	newCommandService = func(string, Config) commandService {
@@ -456,15 +596,24 @@ func captureRunOutput(t *testing.T, args []string) (int, string, string) {
 	return captureRunOutputWithHome(t, args, t.TempDir())
 }
 
+func captureRunOutputInDirWithHome(t *testing.T, args []string, dir string, home string) (int, string, string) {
+	t.Helper()
+	return captureRunOutputWithHomeAndDir(t, args, home, dir)
+}
+
 func captureRunOutputWithHome(t *testing.T, args []string, home string) (int, string, string) {
+	t.Helper()
+	return captureRunOutputWithHomeAndDir(t, args, home, t.TempDir())
+}
+
+func captureRunOutputWithHomeAndDir(t *testing.T, args []string, home string, dir string) (int, string, string) {
 	t.Helper()
 
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd failed: %v", err)
 	}
-	tmp := t.TempDir()
-	if err := os.Chdir(tmp); err != nil {
+	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir failed: %v", err)
 	}
 	t.Cleanup(func() {

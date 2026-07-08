@@ -1,6 +1,7 @@
 package gitignore
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -793,10 +794,17 @@ func TestUpsertDropsStaleManagedEnvExceptionsButPreservesUserOwnedOnes(t *testin
 func TestBuildManagedBlockMatchesContractFixture(t *testing.T) {
 	t.Parallel()
 
+	providers := []string{"jetbrains", "nextjs", "node", "visualstudiocode"}
+	client := api.NewEmbeddedClientWithOptions(api.Options{UpstreamCommit: api.DefaultUpstreamCommit})
+	response, err := client.FetchTemplate(context.Background(), providers)
+	if err != nil {
+		t.Fatalf("fetch embedded template: %v", err)
+	}
+
 	block := BuildManagedBlockWithMetadata(
-		[]string{"jetbrains", "nextjs", "node", "visualstudiocode"},
+		providers,
 		[]string{"# Provenance: github/gitignore@" + api.DefaultUpstreamCommit + " [jetbrains,nextjs,node,visualstudiocode]"},
-		".idea/\n.next/\nnode_modules/\n.vscode/\n",
+		response.Content,
 	)
 
 	wd, err := os.Getwd()
@@ -812,22 +820,109 @@ func TestBuildManagedBlockMatchesContractFixture(t *testing.T) {
 	}
 }
 
-func TestUpsertManagedBlockContractFixturePreservesUnmanagedLines(t *testing.T) {
+func TestUpsertManagedBlockContractFixtureSafetyContracts_AC009_AC010(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".gitignore")
-	seed := strings.Join([]string{
-		"# user-owned rule",
-		StartMarker,
-		"# old block",
-		EndMarker,
-		".planning",
-		"",
-	}, "\n")
-	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
-		t.Fatalf("seed write failed: %v", err)
-	}
+	block := loadManagedBlockContractFixture(t)
+
+	t.Run("AC-009 preserves manual content outside markers", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		path := filepath.Join(dir, ".gitignore")
+		seed := strings.Join([]string{
+			"# user-owned rule",
+			StartMarker,
+			"# old block",
+			EndMarker,
+			".planning",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+			t.Fatalf("seed write failed: %v", err)
+		}
+
+		m := NewManager(dir)
+		if _, err := m.UpsertManagedBlock(block, false); err != nil {
+			t.Fatalf("upsert failed: %v", err)
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read .gitignore failed: %v", err)
+		}
+		want := "# user-owned rule\n" + block + ".planning\n"
+		if string(content) != want {
+			t.Fatalf("expected embedded managed block to replace only managed region\nwant:\n%s\n got:\n%s", want, string(content))
+		}
+	})
+
+	t.Run("AC-010 rejects malformed markers without writing", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		path := filepath.Join(dir, ".gitignore")
+		seed := strings.Join([]string{
+			"# user-owned rule",
+			StartMarker,
+			"# old block",
+			".planning",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+			t.Fatalf("seed write failed: %v", err)
+		}
+
+		m := NewManager(dir)
+		if _, err := m.UpsertManagedBlock(block, false); err == nil {
+			t.Fatalf("expected malformed marker error")
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read .gitignore failed: %v", err)
+		}
+		if string(content) != seed {
+			t.Fatalf("malformed marker input should remain unchanged\nwant:\n%s\n got:\n%s", seed, string(content))
+		}
+	})
+
+	t.Run("AC-010 equivalent rerun is a no-op", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		path := filepath.Join(dir, ".gitignore")
+		seed := "# user-owned rule\n" + block + ".planning\n"
+		if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+			t.Fatalf("seed write failed: %v", err)
+		}
+
+		before, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read seeded .gitignore failed: %v", err)
+		}
+
+		m := NewManager(dir)
+		action, err := m.UpsertManagedBlock(block, false)
+		if err != nil {
+			t.Fatalf("upsert failed: %v", err)
+		}
+		if action != FileActionNoOp {
+			t.Fatalf("expected no-op action on equivalent rerun, got %s", action)
+		}
+
+		after, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read rerun .gitignore failed: %v", err)
+		}
+		if string(before) != string(after) {
+			t.Fatalf("expected equivalent rerun to remain byte-identical\nwant:\n%s\n got:\n%s", string(before), string(after))
+		}
+	})
+}
+
+func loadManagedBlockContractFixture(t *testing.T) string {
+	t.Helper()
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -837,20 +932,7 @@ func TestUpsertManagedBlockContractFixturePreservesUnmanagedLines(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read contract fixture: %v", err)
 	}
-
-	m := NewManager(dir)
-	if _, err := m.UpsertManagedBlock(string(block), false); err != nil {
-		t.Fatalf("upsert failed: %v", err)
-	}
-
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read .gitignore failed: %v", err)
-	}
-	want := "# user-owned rule\n" + string(block) + ".planning\n"
-	if string(content) != want {
-		t.Fatalf("expected embedded managed block to replace only managed region\nwant:\n%s\n got:\n%s", want, string(content))
-	}
+	return string(block)
 }
 
 func countExactLine(content, line string) int {

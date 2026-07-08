@@ -17,5 +17,5 @@ The repositories in this directory are reduced, reviewable fixtures derived from
 ### `laravel-jetbrains-app`
 
 - Derived from a public Laravel app layout with checked-in JetBrains metadata.
-- Preserves `composer.json`, `artisan`, and `.idea/` signals.
+- Preserves `composer.json` and `.idea/` signals, with `laravel/framework` kept on a stable line for rule-evidence assertions.
 - Exercises `composer`, `laravel`, and `jetbrains` detection on a realistic PHP repository shape.

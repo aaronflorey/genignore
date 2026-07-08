@@ -65,7 +65,7 @@ The repository uses a thin entrypoint and focused internal packages so each conc
 │   ├── gitignore/           # Managed marker block building and file upsert behavior
 │   ├── rulecatalog/         # Embedded JSON rule catalog for repository-backed detection
 │   ├── templatecatalog/     # Embedded github/gitignore template snapshot
-│   └── customtemplate/      # Embedded non-remote templates and registry
+│   └── customtemplate/      # Embedded custom templates and registry
 ├── docs/                    # Project documentation
 ├── .github/                 # CI/release automation metadata
 └── .planning/               # Local planning artifacts

@@ -1,0 +1,48 @@
+{
+  "command": "resolve",
+  "cwd": "<fixture>",
+  "detectedProviders": [
+    "jetbrains",
+    "nextjs",
+    "node",
+    "visualstudiocode"
+  ],
+  "finalProviders": [
+    "jetbrains",
+    "nextjs",
+    "node",
+    "visualstudiocode"
+  ],
+  "detectionResults": [
+    {
+      "key": "jetbrains",
+      "matched": true,
+      "reason": "found JetBrains project metadata",
+      "evidence": ".idea"
+    },
+    {
+      "key": "nextjs",
+      "matched": true,
+      "reason": "found next config",
+      "evidence": "next.config.js"
+    },
+    {
+      "key": "node",
+      "matched": true,
+      "reason": "found node project file",
+      "evidence": "package.json"
+    },
+    {
+      "key": "react",
+      "matched": true,
+      "reason": "package.json dependency includes react",
+      "evidence": "package.json"
+    },
+    {
+      "key": "visualstudiocode",
+      "matched": true,
+      "reason": "found VS Code workspace metadata",
+      "evidence": ".vscode"
+    }
+  ]
+}

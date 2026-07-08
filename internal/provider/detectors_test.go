@@ -884,7 +884,7 @@ func TestRegistryMatchesCuratedRepositoryFixtures(t *testing.T) {
 			result: map[string]Result{
 				"composer":  {Key: "composer", Matched: true, Reason: "found composer.json", Evidence: "composer.json"},
 				"jetbrains": {Key: "jetbrains", Matched: true, Reason: "found JetBrains project metadata", Evidence: filepath.Join(".idea")},
-				"laravel":   {Key: "laravel", Matched: true, Reason: "found artisan file", Evidence: "artisan"},
+				"laravel":   {Key: "laravel", Matched: true, Reason: "composer.json references laravel/framework", Evidence: "composer.json:4"},
 			},
 		},
 	}
@@ -911,6 +911,9 @@ func TestRegistryMatchesCuratedRepositoryFixtures(t *testing.T) {
 
 			if !slices.Equal(matched, tt.want) {
 				t.Fatalf("unexpected matched detectors for %s: got %v want %v", tt.fixture, matched, tt.want)
+			}
+			if !slices.IsSorted(matched) {
+				t.Fatalf("matched detectors for %s are not alphabetically sorted: %v", tt.fixture, matched)
 			}
 		})
 	}

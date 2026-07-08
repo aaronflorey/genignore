@@ -106,7 +106,7 @@ Generated managed blocks now include a deterministic `# Provenance:` line that r
 
 `genignore doctor` is the supported diagnostics surface for detector evidence, provider resolution, embedded catalog counts, JSON rule-catalog status, retained embedded custom providers, and managed-block provenance. Detection entries classify repository-backed evidence separately from host-only heuristics such as runtime OS or installed-application checks.
 
-`genignore resolve` is the supported read-only automation surface for provider detection and final provider resolution. It reuses the same ordering, key validation, and include or exclude normalization as `genignore detect`, but it does not fetch templates or mutate `.gitignore`.
+`genignore resolve` is the supported read-only automation surface for provider detection and final provider resolution. It reuses the same ordering, key validation, and include or exclude normalization as `genignore detect`, but it does not assemble or mutate the managed `.gitignore` block.
 
 `genignore` still supports machine-level defaults only. It does not support per-project preset files or repository-local configuration in the current product scope. Any future preset concept remains explicitly deferred to a later scoped phase.
 
@@ -158,6 +158,8 @@ When refreshing the toolchain or release dependencies, keep that work isolated f
 5. Unpack `dist/genignore_*_linux_amd64.tar.gz` and run `./genignore list` or `./genignore help` from the extracted artifact.
 
 Treat upstream catalog snapshot refreshes and Go or GoReleaser version bumps as narrow maintenance changes so any release regression stays reviewable.
+
+For a post-build or post-release offline sanity check, follow `docs/TESTING.md#manual-offline-release-verification` to build the binary, run `detect` in a clean temporary repo with clean HOME and cache directories, and confirm the command succeeds without network access or cache writes.
 
 ## License
 

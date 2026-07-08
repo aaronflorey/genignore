@@ -26,6 +26,9 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v8
 
+      # `go test ./...` includes the embedded catalog and rule-catalog package
+      # tests, so CI fails if the embedded github-gitignore snapshot or
+      # rules.json asset is missing, empty, or invalid.
       - name: Test
         run: go test ./...
 

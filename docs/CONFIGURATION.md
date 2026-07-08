@@ -61,7 +61,7 @@ When no config file is present, `LoadConfig()` returns the zero-value `Config` (
 
 Independent of config file values, managed block normalization always enforces these env rules: `.env`, `.env.*`, `!.env.example`, and `!.env.ci` (`requiredEnvRules` in `internal/gitignore/manager.go`).
 
-## Runtime source behavior
+## Embedded source behavior
 
 Supported-provider validation comes from the embedded `github/gitignore` catalog snapshot shipped with the binary, plus the embedded `ai-agents` and `wrangler` templates.
 

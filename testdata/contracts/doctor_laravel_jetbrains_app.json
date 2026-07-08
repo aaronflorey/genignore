@@ -30,8 +30,8 @@
       "key": "laravel",
       "matched": true,
       "origin": "repository",
-      "reason": "found artisan file",
-      "evidence": "artisan"
+      "reason": "composer.json references laravel/framework",
+      "evidence": "composer.json:4"
     }
   ],
   "runtime": {

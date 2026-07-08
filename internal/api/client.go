@@ -23,6 +23,9 @@ type TemplateResponse struct {
 }
 
 type RuntimeDiagnostics struct {
+	// UpstreamCommit and Offline are retained as internal compatibility fields so
+	// diagnostics and provenance stay stable while template loading remains fully
+	// embedded.
 	UpstreamCommit    string
 	Offline           bool
 	RemoteProviders   []string
@@ -38,6 +41,8 @@ type CacheEntryStatus struct {
 }
 
 type Options struct {
+	// Offline and UpstreamCommit are compatibility-only inputs for diagnostics
+	// and provenance. They do not enable runtime network retrieval.
 	Offline        bool
 	UpstreamCommit string
 }
@@ -91,7 +96,7 @@ func (c *Client) InspectRuntime(providers []string) RuntimeDiagnostics {
 		decisions = append(decisions, "embedded custom providers are merged with upstream templates in requested provider order")
 	}
 	if c.offline {
-		decisions = append(decisions, "runtime.offline does not change template retrieval because templates are already loaded from checked-in content")
+		decisions = append(decisions, "legacy offline compatibility settings do not change template loading because provider content is already checked in")
 	}
 
 	return RuntimeDiagnostics{

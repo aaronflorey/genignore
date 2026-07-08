@@ -91,3 +91,54 @@ func TestMatchRuleMatchesExactDirectoryPath(t *testing.T) {
 		t.Fatal("MatchRule() = false, want true for an exact directory path match")
 	}
 }
+
+func TestMatchRuleWithResultSurfacesStablePathEvidence(t *testing.T) {
+	t.Parallel()
+
+	result, err := MatchRuleWithResult(fstest.MapFS{
+		"package.json": &fstest.MapFile{Data: []byte(`{"name":"demo"}`)},
+	}, Rule{Type: RuleTypeFilePath, Path: "package.json"})
+	if err != nil {
+		t.Fatalf("MatchRuleWithResult() error = %v", err)
+	}
+
+	want := MatchResult{Matched: true, Rule: Rule{Type: RuleTypeFilePath, Path: "package.json"}, Path: "package.json"}
+	if result != want {
+		t.Fatalf("MatchRuleWithResult() = %+v, want %+v", result, want)
+	}
+	if evidence := result.Evidence(); evidence != "package.json" {
+		t.Fatalf("Evidence() = %q, want %q", evidence, "package.json")
+	}
+}
+
+func TestMatchEntryWithResultSurfacesStableContentLineEvidence(t *testing.T) {
+	t.Parallel()
+
+	entry := Entry{
+		Provider: "laravel",
+		Match: []Rule{
+			{Type: RuleTypeFilePath, Path: "artisan"},
+			{Type: RuleTypeFileContentLine, Path: "composer.json", Contains: "laravel/framework"},
+		},
+	}
+
+	result, err := MatchEntryWithResult(fstest.MapFS{
+		"composer.json": &fstest.MapFile{Data: []byte("{\n  \"require\": {\n    \"laravel/framework\": \"^11.0\"\n  }\n}\n")},
+	}, entry)
+	if err != nil {
+		t.Fatalf("MatchEntryWithResult() error = %v", err)
+	}
+
+	want := MatchResult{
+		Matched: true,
+		Rule:    Rule{Type: RuleTypeFileContentLine, Path: "composer.json", Contains: "laravel/framework"},
+		Path:    "composer.json",
+		Line:    3,
+	}
+	if result != want {
+		t.Fatalf("MatchEntryWithResult() = %+v, want %+v", result, want)
+	}
+	if evidence := result.Evidence(); evidence != "composer.json:3" {
+		t.Fatalf("Evidence() = %q, want %q", evidence, "composer.json:3")
+	}
+}

@@ -493,6 +493,34 @@ func TestNewServiceAddUsesEmbeddedUpstreamTemplatesWithoutHTTPServer(t *testing.
 	}
 }
 
+func TestNewServiceDetectFixtureGeneratesEmbeddedTemplateWithoutCache(t *testing.T) {
+	dir := copyRepoFixture(t, "node-app")
+	homeDir := prepareHome(t)
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+
+	svc := NewService(dir, Config{})
+
+	res, err := svc.Detect(context.Background(), DetectOptions{Exclude: []string{"linux", "macos", "windows"}})
+	if err != nil {
+		t.Fatalf("detect failed: %v", err)
+	}
+	if !reflect.DeepEqual(res.FinalProviders, []string{"node"}) {
+		t.Fatalf("unexpected final providers: %v", res.FinalProviders)
+	}
+	content, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore failed: %v", err)
+	}
+	if !strings.Contains(string(content), "node_modules/") {
+		t.Fatalf("expected embedded node template content in .gitignore: %q", string(content))
+	}
+	assertNoRuntimeCacheWrites(t, homeDir)
+	if _, ok := svc.Client.(*api.EmbeddedClient); !ok {
+		t.Fatalf("expected embedded client, got %T", svc.Client)
+	}
+}
+
 func TestAPIFailureHardFails(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -1094,6 +1122,117 @@ func TestDetectWritesEmbeddedManagedBlockAndPreservesUserLines(t *testing.T) {
 	}
 }
 
+func TestAddEmbeddedManagedBlockSafetyContracts_AC009_AC010(t *testing.T) {
+	t.Parallel()
+
+	const contractName = "managed_block_next_vscode_app.gitignore"
+	runAdd := func(t *testing.T, dir string) (CommandResult, string) {
+		t.Helper()
+
+		svc := NewService(dir, Config{})
+		res, err := svc.Add(context.Background(), AddOptions{Keys: []string{"jetbrains", "nextjs", "node", "visualstudiocode"}})
+		if err != nil {
+			t.Fatalf("add failed: %v", err)
+		}
+		content, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+		if err != nil {
+			t.Fatalf("read .gitignore failed: %v", err)
+		}
+		return res, string(content)
+	}
+
+	t.Run("AC-009 preserves manual content outside markers", func(t *testing.T) {
+		t.Parallel()
+
+		dir := copyRepoFixture(t, "next-vscode-app")
+		path := filepath.Join(dir, ".gitignore")
+		seed := strings.Join([]string{
+			"# user-owned rule",
+			gitignore.StartMarker,
+			"# old block",
+			gitignore.EndMarker,
+			".planning",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+			t.Fatalf("seed write failed: %v", err)
+		}
+
+		res, content := runAdd(t, dir)
+		if res.FileAction != gitignore.FileActionUpdated {
+			t.Fatalf("unexpected file action: %s", res.FileAction)
+		}
+
+		managedBlock := content[strings.Index(content, gitignore.StartMarker) : strings.Index(content, gitignore.EndMarker)+len(gitignore.EndMarker)+1]
+		assertTextContract(t, contractName, managedBlock)
+
+		want := "# user-owned rule\n" + managedBlock + ".planning\n"
+		if content != want {
+			t.Fatalf("expected detect to replace only the managed region\nwant:\n%s\n got:\n%s", want, content)
+		}
+		if strings.Contains(content, "# old block") {
+			t.Fatalf("expected previous managed content replaced\n%s", content)
+		}
+	})
+
+	t.Run("AC-010 rejects malformed markers without writing", func(t *testing.T) {
+		t.Parallel()
+
+		dir := copyRepoFixture(t, "next-vscode-app")
+		path := filepath.Join(dir, ".gitignore")
+		seed := strings.Join([]string{
+			"# user-owned rule",
+			gitignore.StartMarker,
+			"# old block",
+			".planning",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+			t.Fatalf("seed write failed: %v", err)
+		}
+
+		svc := NewService(dir, Config{})
+		if _, err := svc.Add(context.Background(), AddOptions{Keys: []string{"jetbrains", "nextjs", "node", "visualstudiocode"}}); err == nil {
+			t.Fatalf("expected malformed marker error")
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read .gitignore failed: %v", err)
+		}
+		if string(content) != seed {
+			t.Fatalf("malformed marker input should remain unchanged\nwant:\n%s\n got:\n%s", seed, string(content))
+		}
+	})
+
+	t.Run("AC-010 equivalent rerun reports no-op", func(t *testing.T) {
+		t.Parallel()
+
+		dir := copyRepoFixture(t, "next-vscode-app")
+		path := filepath.Join(dir, ".gitignore")
+		seed := strings.Join([]string{
+			"# user-owned rule",
+			gitignore.StartMarker,
+			"# old block",
+			gitignore.EndMarker,
+			".planning",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+			t.Fatalf("seed write failed: %v", err)
+		}
+
+		_, firstContent := runAdd(t, dir)
+		res, secondContent := runAdd(t, dir)
+		if res.FileAction != gitignore.FileActionNoOp {
+			t.Fatalf("unexpected second add action: %s", res.FileAction)
+		}
+		if secondContent != firstContent {
+			t.Fatalf("expected equivalent embedded rerun to remain byte-identical\nfirst:\n%s\nsecond:\n%s", firstContent, secondContent)
+		}
+	})
+}
+
 func TestAddWritesCleanManagedBlockAndIsStableOnRerun(t *testing.T) {
 	t.Parallel()
 
@@ -1379,16 +1518,8 @@ func TestDetectDiffContractNextVSCodeFixture(t *testing.T) {
 	t.Parallel()
 
 	dir := copyRepoFixture(t, "next-vscode-app")
-	client := &fakeAPI{
-		available: provider.SupportedKeys,
-		template:  ".idea/\n.next/\nnode_modules/\n.vscode/\n",
-	}
-	svc := &Service{
-		CWD:       dir,
-		Client:    client,
-		Manager:   gitignore.NewManager(dir),
-		Detectors: fixtureDetectors("jetbrains", "nextjs", "node", "react", "visualstudiocode"),
-	}
+	svc := NewService(dir, Config{})
+	svc.Detectors = fixtureDetectors("jetbrains", "nextjs", "node", "react", "visualstudiocode")
 
 	res, err := svc.Detect(context.Background(), DetectOptions{Diff: true})
 	if err != nil {
@@ -1408,16 +1539,8 @@ func TestDetectFixtureProducesStableManagedBlockAndJSON(t *testing.T) {
 		t.Helper()
 
 		dir := copyRepoFixture(t, "next-vscode-app")
-		client := &fakeAPI{
-			available: provider.SupportedKeys,
-			template:  ".idea/\n.next/\nnode_modules/\n.vscode/\n",
-		}
-		svc := &Service{
-			CWD:       dir,
-			Client:    client,
-			Manager:   gitignore.NewManager(dir),
-			Detectors: fixtureDetectors("jetbrains", "nextjs", "node", "react", "visualstudiocode"),
-		}
+		svc := NewService(dir, Config{})
+		svc.Detectors = fixtureDetectors("jetbrains", "nextjs", "node", "react", "visualstudiocode")
 
 		res, err := svc.Detect(context.Background(), DetectOptions{})
 		if err != nil {
@@ -1441,9 +1564,58 @@ func TestDetectFixtureProducesStableManagedBlockAndJSON(t *testing.T) {
 	if firstJSON != secondJSON {
 		t.Fatalf("detect json changed across repeated fixture runs\nfirst:\n%s\nsecond:\n%s", firstJSON, secondJSON)
 	}
-	for _, forbidden := range []string{"remote", "cache"} {
+	for _, forbidden := range []string{"remote"} {
 		if strings.Contains(strings.ToLower(firstBlock), forbidden) {
 			t.Fatalf("managed block contract contains obsolete %q wording:\n%s", forbidden, firstBlock)
+		}
+	}
+}
+
+func TestResolveContractNextVSCodeFixture(t *testing.T) {
+	t.Parallel()
+
+	dir := copyRepoFixture(t, "next-vscode-app")
+	svc := NewService(dir, Config{})
+	svc.Detectors = fixtureDetectors("jetbrains", "nextjs", "node", "react", "visualstudiocode")
+
+	res, err := svc.Resolve(context.Background(), ResolveOptions{})
+	if err != nil {
+		t.Fatalf("resolve failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf("expected resolve to avoid writing .gitignore")
+	}
+
+	assertJSONContract(t, "resolve_next_vscode_app.json", normalizeResolveResultContract(res, dir))
+}
+
+func TestResolveFixtureProducesStableJSON(t *testing.T) {
+	t.Parallel()
+
+	run := func(t *testing.T) string {
+		t.Helper()
+
+		dir := copyRepoFixture(t, "next-vscode-app")
+		svc := NewService(dir, Config{})
+		svc.Detectors = fixtureDetectors("jetbrains", "nextjs", "node", "react", "visualstudiocode")
+
+		res, err := svc.Resolve(context.Background(), ResolveOptions{})
+		if err != nil {
+			t.Fatalf("resolve failed: %v", err)
+		}
+
+		return marshalContractJSON(t, normalizeResolveResultContract(res, dir))
+	}
+
+	first := run(t)
+	second := run(t)
+
+	if first != second {
+		t.Fatalf("resolve json changed across repeated fixture runs\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+	for _, forbidden := range []string{"remote", "cache"} {
+		if strings.Contains(strings.ToLower(first), forbidden) {
+			t.Fatalf("resolve contract contains obsolete %q wording:\n%s", forbidden, first)
 		}
 	}
 }
@@ -1452,15 +1624,8 @@ func TestDoctorContractLaravelJetBrainsFixture(t *testing.T) {
 	t.Parallel()
 
 	dir := copyRepoFixture(t, "laravel-jetbrains-app")
-	client := &fakeAPI{
-		available: provider.SupportedKeys,
-	}
-	svc := &Service{
-		CWD:       dir,
-		Client:    client,
-		Manager:   gitignore.NewManager(dir),
-		Detectors: fixtureDetectors("composer", "jetbrains", "laravel"),
-	}
+	svc := NewService(dir, Config{})
+	svc.Detectors = fixtureDetectors("composer", "jetbrains", "laravel")
 
 	res, err := svc.Doctor(context.Background(), DoctorOptions{})
 	if err != nil {
@@ -1477,15 +1642,8 @@ func TestDoctorFixtureProducesStableJSON(t *testing.T) {
 		t.Helper()
 
 		dir := copyRepoFixture(t, "laravel-jetbrains-app")
-		client := &fakeAPI{
-			available: provider.SupportedKeys,
-		}
-		svc := &Service{
-			CWD:       dir,
-			Client:    client,
-			Manager:   gitignore.NewManager(dir),
-			Detectors: fixtureDetectors("composer", "jetbrains", "laravel"),
-		}
+		svc := NewService(dir, Config{})
+		svc.Detectors = fixtureDetectors("composer", "jetbrains", "laravel")
 
 		res, err := svc.Doctor(context.Background(), DoctorOptions{})
 		if err != nil {
@@ -1593,6 +1751,14 @@ func normalizeDoctorResultContract(result DoctorResult, root string) DoctorResul
 	result.CWD = "<fixture>"
 	for i := range result.Detections {
 		result.Detections[i].Evidence = normalizeEvidencePath(root, result.Detections[i].Evidence)
+	}
+	return result
+}
+
+func normalizeResolveResultContract(result ResolveResult, root string) ResolveResult {
+	result.CWD = "<fixture>"
+	for i := range result.DetectionResults {
+		result.DetectionResults[i].Evidence = normalizeEvidencePath(root, result.DetectionResults[i].Evidence)
 	}
 	return result
 }
