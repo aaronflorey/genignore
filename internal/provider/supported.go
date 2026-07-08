@@ -18,6 +18,11 @@ func init() {
 	SupportedKeys = []string{}
 	supportedSet = map[string]struct{}{}
 
+	if err := providercatalog.InitError(); err != nil {
+		initErr = fmt.Errorf("load embedded upstream templates: %w", err)
+		return
+	}
+
 	if err := customtemplate.InitError(); err != nil {
 		initErr = fmt.Errorf("load embedded custom templates: %w", err)
 		return

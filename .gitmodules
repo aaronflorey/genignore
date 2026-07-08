@@ -1,0 +1,3 @@
+[submodule "internal/templatecatalog/github-gitignore"]
+	path = internal/templatecatalog/github-gitignore
+	url = https://github.com/github/gitignore.git

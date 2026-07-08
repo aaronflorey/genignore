@@ -35,7 +35,7 @@
     }
   ],
   "runtime": {
-    "upstreamCommit": "3780fff86c705155792fb3e1787cebd6281ba8cf",
+    "upstreamCommit": "dcc0fc7bc2b5ba480cf117ad1be31bafceeaff46",
     "offline": false,
     "remoteProviders": [
       "composer",
@@ -47,6 +47,6 @@
     ]
   },
   "provenance": [
-    "# Provenance: github/gitignore@3780fff86c705155792fb3e1787cebd6281ba8cf [composer,jetbrains,laravel]"
+    "# Provenance: github/gitignore@dcc0fc7bc2b5ba480cf117ad1be31bafceeaff46 [composer,jetbrains,laravel]"
   ]
 }

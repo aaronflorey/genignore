@@ -33,6 +33,15 @@ func TestNewClientWithOptionsPinsUpstreamCommit(t *testing.T) {
 	}
 }
 
+func TestDefaultUpstreamCommitMatchesEmbeddedCatalogPin(t *testing.T) {
+	t.Parallel()
+
+	const submoduleCommit = "dcc0fc7bc2b5ba480cf117ad1be31bafceeaff46"
+	if DefaultUpstreamCommit != submoduleCommit {
+		t.Fatalf("DefaultUpstreamCommit = %q, want %q", DefaultUpstreamCommit, submoduleCommit)
+	}
+}
+
 func TestClientUsesFixtures(t *testing.T) {
 	t.Parallel()
 	templateFixture, err := os.ReadFile(filepath.Join("testdata", "template.txt"))
@@ -495,6 +504,81 @@ func TestFetchTemplateResolvesGlobalTemplatePathsAndPreservesRequestedOrder(t *t
 	}
 	if resp.Content != ".DS_Store\n\nbin/" {
 		t.Fatalf("unexpected merged content: %q", resp.Content)
+	}
+}
+
+func TestFetchTemplateResolvesCommunityTemplatePath(t *testing.T) {
+	t.Parallel()
+
+	requestPaths := make([]string, 0, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"community/JavaScript/Vue.gitignore","type":"blob"}]}`))
+		case "/templates/community/JavaScript/Vue.gitignore":
+			requestPaths = append(requestPaths, r.URL.Path)
+			_, _ = w.Write([]byte("dist\n"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.listURL = server.URL + "/catalog"
+	client.templateURL = server.URL + "/templates/"
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"javascript/vue"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if !slices.Equal(requestPaths, []string{"/templates/community/JavaScript/Vue.gitignore"}) {
+		t.Fatalf("unexpected request paths: %v", requestPaths)
+	}
+	if resp.Content != "dist" {
+		t.Fatalf("unexpected template content: %q", resp.Content)
+	}
+	if !slices.Equal(resp.AvailableProviders, []string{"javascript/vue"}) {
+		t.Fatalf("unexpected available providers: %v", resp.AvailableProviders)
+	}
+}
+
+func TestFetchTemplateResolvesGlobalCollisionUsingEmbeddedParityRules(t *testing.T) {
+	t.Parallel()
+
+	requestPaths := make([]string, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/catalog":
+			_, _ = w.Write([]byte(`{"tree":[{"path":"AL.gitignore","type":"blob"},{"path":"Global/AL.gitignore","type":"blob"}]}`))
+		case "/templates/AL.gitignore":
+			requestPaths = append(requestPaths, r.URL.Path)
+			_, _ = w.Write([]byte("root\n"))
+		case "/templates/Global/AL.gitignore":
+			requestPaths = append(requestPaths, r.URL.Path)
+			_, _ = w.Write([]byte("global\n"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.listURL = server.URL + "/catalog"
+	client.templateURL = server.URL + "/templates/"
+
+	resp, err := client.FetchTemplate(context.Background(), []string{"al", "global/al"})
+	if err != nil {
+		t.Fatalf("FetchTemplate failed: %v", err)
+	}
+	if !slices.Equal(requestPaths, []string{"/templates/AL.gitignore", "/templates/Global/AL.gitignore"}) {
+		t.Fatalf("unexpected request paths: %v", requestPaths)
+	}
+	if resp.Content != "root\n\nglobal" {
+		t.Fatalf("unexpected merged content: %q", resp.Content)
+	}
+	if !slices.Equal(resp.AvailableProviders, []string{"al", "global/al"}) {
+		t.Fatalf("unexpected available providers: %v", resp.AvailableProviders)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -19,10 +18,11 @@ import (
 
 	"github.com/aaronflorey/genignore/internal/customtemplate"
 	"github.com/aaronflorey/genignore/internal/providercatalog"
+	"github.com/aaronflorey/genignore/internal/templatecatalog"
 )
 
 const (
-	DefaultUpstreamCommit  = "3780fff86c705155792fb3e1787cebd6281ba8cf"
+	DefaultUpstreamCommit  = "dcc0fc7bc2b5ba480cf117ad1be31bafceeaff46"
 	defaultListURLTemplate = "https://api.github.com/repos/github/gitignore/git/trees/%s?recursive=1"
 	defaultTemplateURLTmpl = "https://raw.githubusercontent.com/github/gitignore/%s/"
 	cacheMetadataVersion   = 1
@@ -495,21 +495,15 @@ func decodeProviderCatalog(body []byte) (map[string]string, error) {
 		return nil, fmt.Errorf("missing tree entries")
 	}
 
-	catalog := make(map[string]string)
+	templatePaths := make([]string, 0, len(treeResponse.Tree))
 	for _, entry := range treeResponse.Tree {
-		if entry.Type != "blob" || !strings.HasSuffix(entry.Path, ".gitignore") || !isCatalogTemplatePath(entry.Path) {
+		if entry.Type != "blob" {
 			continue
 		}
-		key := strings.ToLower(strings.TrimSuffix(path.Base(entry.Path), ".gitignore"))
-		if existing, ok := catalog[key]; ok && !preferCatalogPath(entry.Path, existing) {
-			continue
-		}
-		catalog[key] = entry.Path
+		templatePaths = append(templatePaths, entry.Path)
 	}
-	if len(catalog) == 0 {
-		return nil, fmt.Errorf("no gitignore templates found")
-	}
-	return catalog, nil
+
+	return templatecatalog.ProviderPaths(templatePaths)
 }
 
 func sortedCatalogProviders(catalog map[string]string) []string {
@@ -519,21 +513,6 @@ func sortedCatalogProviders(catalog map[string]string) []string {
 	}
 	slices.Sort(providers)
 	return providers
-}
-
-func isCatalogTemplatePath(templatePath string) bool {
-	if !strings.Contains(templatePath, "/") {
-		return true
-	}
-	parts := strings.Split(templatePath, "/")
-	return len(parts) == 2 && parts[0] == "Global"
-}
-
-func preferCatalogPath(candidate string, existing string) bool {
-	if strings.Count(candidate, "/") != strings.Count(existing, "/") {
-		return strings.Count(candidate, "/") < strings.Count(existing, "/")
-	}
-	return candidate < existing
 }
 
 func cloneCatalog(catalog map[string]string) map[string]string {
