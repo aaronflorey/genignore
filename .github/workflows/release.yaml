@@ -43,7 +43,7 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.15.2
           args: release --clean
