@@ -81,6 +81,24 @@ fn crlf_bytes_preserved_outside_markers() {
 }
 
 #[test]
+fn non_utf8_bytes_preserved_outside_markers() {
+    let dir = tempdir("nonutf8");
+    // e.g. a latin-1 filename pattern in user-owned lines; U+FFFD replacement
+    // would silently corrupt it if the file were decoded/encoded as UTF-8.
+    let mut existing = b"ma\xf1ana.txt\n".to_vec();
+    existing.extend_from_slice(b"# BEGIN genignore\nold\n# END genignore\n");
+    existing.extend_from_slice(b"t\xfchwe\r\n");
+    fs::write(dir.join(".gitignore"), &existing).unwrap();
+    let mgr = Manager::new(&dir);
+    mgr.upsert_managed_block(&block(&["go"], TPL), false)
+        .unwrap();
+    let content = fs::read(dir.join(".gitignore")).unwrap();
+    assert!(content.starts_with(b"ma\xf1ana.txt\n"));
+    assert!(content.ends_with(b"t\xfchwe\r\n"));
+    assert!(!content.windows(3).any(|w| w == [0xEF, 0xBF, 0xBD]));
+}
+
+#[test]
 fn malformed_markers_error_and_untouched() {
     let dir = tempdir("badmark");
     let bad = "# BEGIN genignore\nx\n# BEGIN genignore\n# END genignore\n";
@@ -172,19 +190,19 @@ fn preview_returns_diff_without_writing() {
 
 #[test]
 fn parse_managed_providers_roundtrip() {
-    let content = "# BEGIN genignore\n# Providers: a,b\n# END genignore\n";
+    let content = b"# BEGIN genignore\n# Providers: a,b\n# END genignore\n";
     assert_eq!(
         parse_managed_providers(content),
         Some(vec!["a".to_string(), "b".to_string()])
     );
-    assert_eq!(parse_managed_providers("no markers"), None);
+    assert_eq!(parse_managed_providers(b"no markers"), None);
     assert_eq!(
-        parse_managed_providers("# END genignore\n# BEGIN genignore\n"),
+        parse_managed_providers(b"# END genignore\n# BEGIN genignore\n"),
         None
     );
     // malformed markers -> None (merge step surfaces the error later)
     assert_eq!(
-        parse_managed_providers("# BEGIN genignore\n# BEGIN genignore\n# END genignore\n"),
+        parse_managed_providers(b"# BEGIN genignore\n# BEGIN genignore\n# END genignore\n"),
         None
     );
 }

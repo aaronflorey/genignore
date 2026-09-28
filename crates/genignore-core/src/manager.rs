@@ -54,7 +54,7 @@ impl Manager {
     }
 
     pub fn read_managed_providers(&self) -> Result<Option<Vec<String>>, String> {
-        match fs::read_to_string(&self.path) {
+        match fs::read(&self.path) {
             Ok(content) => Ok(parse_managed_providers(&content)),
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(format!("read .gitignore: {}", err)),
@@ -65,7 +65,7 @@ impl Manager {
         let change = self.plan_change(block)?;
         Ok(Preview {
             action: change.action,
-            diff: managed_block_diff(&change.current_block, block),
+            diff: managed_block_diff(&change.current_block, block.as_bytes()),
         })
     }
 
@@ -85,7 +85,7 @@ impl Manager {
         if change.action == FileAction::NoOp {
             return Ok(FileAction::NoOp);
         }
-        fs::write(&self.path, change.updated_content.as_bytes())
+        fs::write(&self.path, &change.updated_content)
             .map_err(|e| format!("update .gitignore: {}", e))?;
         Ok(FileAction::Updated)
     }
@@ -96,16 +96,15 @@ impl Manager {
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 return Ok(PlannedChange {
                     action: FileAction::Created,
-                    current_block: String::new(),
-                    updated_content: block.to_string(),
+                    current_block: Vec::new(),
+                    updated_content: block.as_bytes().to_vec(),
                 });
             }
             Err(err) => return Err(format!("read .gitignore: {}", err)),
         };
-        let existing = String::from_utf8_lossy(&content).into_owned();
-        let current_block = current_managed_block(&existing)?;
-        let updated = merge_managed_block(&existing, block)?;
-        if updated == existing {
+        let current_block = current_managed_block(&content)?;
+        let updated = merge_managed_block(&content, block)?;
+        if updated == content {
             return Ok(PlannedChange {
                 action: FileAction::NoOp,
                 current_block,
@@ -122,8 +121,8 @@ impl Manager {
 
 struct PlannedChange {
     action: FileAction,
-    current_block: String,
-    updated_content: String,
+    current_block: Vec<u8>,
+    updated_content: Vec<u8>,
 }
 
 pub fn build_managed_block(
@@ -277,40 +276,59 @@ fn is_rule_line(line: &str) -> bool {
     !trimmed.is_empty() && !trimmed.starts_with('#')
 }
 
-pub fn parse_managed_providers(content: &str) -> Option<Vec<String>> {
-    let start = content.find(START_MARKER)?;
-    let end = content.find(END_MARKER)?;
+pub fn parse_managed_providers(content: &[u8]) -> Option<Vec<String>> {
+    let start = find_subslice(content, START_MARKER.as_bytes())?;
+    let end = find_subslice(content, END_MARKER.as_bytes())?;
     if end < start {
         return None;
     }
     let block = &content[start..end];
-    for line in block.split('\n') {
-        if let Some(csv) = line.strip_prefix("# Providers: ") {
+    for line in block.split(|b| *b == b'\n') {
+        if let Some(csv) = line.strip_prefix(b"# Providers: ") {
             if csv.is_empty() {
                 return None;
             }
-            return Some(csv.split(',').map(|s| s.to_string()).collect());
+            return Some(
+                csv.split(|b| *b == b',')
+                    .map(|s| String::from_utf8_lossy(s).into_owned())
+                    .collect(),
+            );
         }
     }
     None
 }
 
-fn marker_bounds(content: &str) -> Result<Option<(usize, usize)>, String> {
-    let start_count = content.matches(START_MARKER).count();
-    let end_count = content.matches(END_MARKER).count();
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+fn count_subslice(haystack: &[u8], needle: &[u8]) -> usize {
+    // Non-overlapping count, matching Go's strings.Count.
+    let mut count = 0;
+    let mut offset = 0;
+    while let Some(pos) = find_subslice(&haystack[offset..], needle) {
+        count += 1;
+        offset += pos + needle.len();
+    }
+    count
+}
+
+fn marker_bounds(content: &[u8]) -> Result<Option<(usize, usize)>, String> {
+    let start_count = count_subslice(content, START_MARKER.as_bytes());
+    let end_count = count_subslice(content, END_MARKER.as_bytes());
     if start_count == 0 && end_count == 0 {
         return Ok(None);
     }
     if start_count != 1 || end_count != 1 {
         return Err(malformed_markers_error());
     }
-    let start = content.find(START_MARKER).unwrap();
-    let mut end = content.find(END_MARKER).unwrap();
+    let start = find_subslice(content, START_MARKER.as_bytes()).unwrap();
+    let mut end = find_subslice(content, END_MARKER.as_bytes()).unwrap();
     if end < start {
         return Err(malformed_markers_error());
     }
     end += END_MARKER.len();
-    if end < content.len() && content.as_bytes()[end] == b'\n' {
+    if end < content.len() && content[end] == b'\n' {
         end += 1;
     }
     Ok(Some((start, end)))
@@ -323,34 +341,40 @@ fn malformed_markers_error() -> String {
     )
 }
 
-fn merge_managed_block(existing: &str, block: &str) -> Result<String, String> {
+fn merge_managed_block(existing: &[u8], block: &str) -> Result<Vec<u8>, String> {
+    let block_bytes = block.as_bytes();
     match marker_bounds(existing)? {
         None => {
             if existing.is_empty() {
-                Ok(block.to_string())
-            } else if block.ends_with('\n') {
-                Ok(format!("{}{}", block, existing))
+                Ok(block_bytes.to_vec())
             } else {
-                Ok(format!("{}\n{}", block, existing))
+                let mut out = Vec::with_capacity(block_bytes.len() + existing.len() + 1);
+                out.extend_from_slice(block_bytes);
+                if !block.ends_with('\n') {
+                    out.push(b'\n');
+                }
+                out.extend_from_slice(existing);
+                Ok(out)
             }
         }
-        Some((start, end)) => Ok(format!(
-            "{}{}{}",
-            &existing[..start],
-            block,
-            &existing[end..]
-        )),
+        Some((start, end)) => {
+            let mut out = Vec::with_capacity(start + block_bytes.len() + existing.len() - end);
+            out.extend_from_slice(&existing[..start]);
+            out.extend_from_slice(block_bytes);
+            out.extend_from_slice(&existing[end..]);
+            Ok(out)
+        }
     }
 }
 
-fn current_managed_block(content: &str) -> Result<String, String> {
+fn current_managed_block(content: &[u8]) -> Result<Vec<u8>, String> {
     match marker_bounds(content)? {
-        None => Ok(String::new()),
-        Some((start, end)) => Ok(content[start..end].to_string()),
+        None => Ok(Vec::new()),
+        Some((start, end)) => Ok(content[start..end].to_vec()),
     }
 }
 
-fn managed_block_diff(current_block: &str, next_block: &str) -> String {
+fn managed_block_diff(current_block: &[u8], next_block: &[u8]) -> String {
     if current_block == next_block {
         return String::new();
     }
@@ -368,10 +392,13 @@ fn managed_block_diff(current_block: &str, next_block: &str) -> String {
     lines.join("\n")
 }
 
-fn diff_lines(content: &str) -> Vec<String> {
-    let trimmed = content.strip_suffix('\n').unwrap_or(content);
+fn diff_lines(content: &[u8]) -> Vec<String> {
+    let trimmed = content.strip_suffix(b"\n").unwrap_or(content);
     if trimmed.is_empty() {
         return Vec::new();
     }
-    trimmed.split('\n').map(|s| s.to_string()).collect()
+    trimmed
+        .split(|b| *b == b'\n')
+        .map(|s| String::from_utf8_lossy(s).into_owned())
+        .collect()
 }

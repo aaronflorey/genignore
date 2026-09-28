@@ -91,6 +91,32 @@ fn scan_is_one_level_only() {
 }
 
 #[test]
+fn glob_only_signals_match_csproj() {
+    // Exercises filepath_glob's path handling: the pattern is split and the
+    // matcher runs on filenames only, so a joined absolute path (which would
+    // contain '\' separators on Windows) is never globbed as a single name.
+    let dir = tempdir("csproj");
+    fs::write(dir.join("App.csproj"), "<Project />").unwrap();
+    let det = detectors();
+    let ctx = ScanCtx::new(&dir);
+    let (matched, results) = scan_target(&ctx, &det);
+    assert!(matched.contains("csharp"));
+    let csharp = results.iter().find(|r| r.key == "csharp").unwrap();
+    assert_eq!(csharp.reason, "found csharp solution/project file");
+    assert!(matched.contains("dotnetcore"));
+
+    // A .cs file in a first-level subdirectory is a valid glob match too.
+    fs::remove_file(dir.join("App.csproj")).unwrap();
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(dir.join("src/Main.cs"), "class Main {}").unwrap();
+    let ctx = ScanCtx::new(&dir);
+    let (matched, results) = scan_target(&ctx, &det);
+    assert!(matched.contains("csharp"));
+    let csharp = results.iter().find(|r| r.key == "csharp").unwrap();
+    assert_eq!(csharp.reason, "found csharp source file");
+}
+
+#[test]
 fn scan_skips_gitignored_subdirs() {
     let dir = tempdir("ignored");
     git_init(&dir);

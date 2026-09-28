@@ -105,35 +105,36 @@ fn any_file_signal(file_names: &'static [&'static str]) -> SignalMatch {
     })
 }
 
-/// Port of Go's `filepath.Glob` (unconfined OS-level glob): non-meta patterns
-/// stat via lstat, meta patterns read directories recursively. Returns the
-/// matched paths (Go returns them in sorted order).
+/// Port of Go's `filepath.Glob` (unconfined OS-level glob) rooted at `dir`:
+/// non-meta patterns stat via lstat, meta patterns read directories
+/// recursively. The base directory stays a `Path` and the glob matcher only
+/// ever sees filename portions, so native separators in `dir` are never
+/// interpreted as pattern syntax. Returns the matched paths (Go returns them
+/// in sorted order).
 fn filepath_glob(dir: &Path, pattern: &str) -> Vec<String> {
-    glob_os(&dir.join(pattern).to_string_lossy())
-}
-
-fn glob_os(pattern: &str) -> Vec<String> {
     if crate::globmatch::path_match(pattern, "").is_err() {
         return Vec::new();
     }
     if !pattern.bytes().any(|b| matches!(b, b'*' | b'?' | b'[')) {
-        return match fs::symlink_metadata(pattern) {
-            Ok(_) => vec![pattern.to_string()],
+        let path = dir.join(pattern);
+        return match fs::symlink_metadata(&path) {
+            Ok(_) => vec![path.to_string_lossy().to_string()],
             Err(_) => Vec::new(),
         };
     }
     let (dir_part, file_part) = match pattern.rfind('/') {
         Some(idx) => (&pattern[..idx], &pattern[idx + 1..]),
-        None => (".", pattern),
+        None => ("", pattern),
     };
-    let dir_part = if dir_part.is_empty() { "/" } else { dir_part };
-    if dir_part == pattern {
-        return Vec::new();
-    }
-    let dirs = if dir_part.bytes().any(|b| matches!(b, b'*' | b'?' | b'[')) {
-        glob_os(dir_part)
+    let dirs: Vec<PathBuf> = if dir_part.is_empty() {
+        vec![dir.to_path_buf()]
+    } else if dir_part.bytes().any(|b| matches!(b, b'*' | b'?' | b'[')) {
+        filepath_glob(dir, dir_part)
+            .into_iter()
+            .map(PathBuf::from)
+            .collect()
     } else {
-        vec![dir_part.to_string()]
+        vec![dir.join(dir_part)]
     };
     let mut matches = Vec::new();
     for d in dirs {
@@ -148,12 +149,7 @@ fn glob_os(pattern: &str) -> Vec<String> {
         names.sort();
         for name in names {
             if crate::globmatch::path_match(file_part, &name).unwrap_or(false) {
-                let joined = if d == "." {
-                    name.clone()
-                } else {
-                    format!("{}/{}", d.trim_end_matches('/'), name)
-                };
-                matches.push(joined);
+                matches.push(d.join(&name).to_string_lossy().to_string());
             }
         }
     }
