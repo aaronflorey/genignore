@@ -1,8 +1,10 @@
 [tools]
 betterleaks = "1.8.1"
-rust = "1.97.1"
+"cargo:cargo-deny" = "0.20.2"
 hk = "2.3.0"
 "npm:ls-lint" = "0.1.2"
 pinact = "5.0.0"
 pkl = "0.32.1"
+rust = "1.98.1"
+tombi = "1.5.5"
 zizmor = "1.30.1"

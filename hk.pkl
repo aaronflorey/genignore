@@ -5,7 +5,9 @@ import "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Builtins.
 local linters = new Mapping<String, Step> {
   ["betterleaks"] = Builtins.betterleaks
   ["byte_order_marker"] = Builtins.byte_order_marker
+  ["cargo_check"] = Builtins.cargo_check
   ["cargo_clippy"] = Builtins.cargo_clippy
+  ["cargo_deny"] = Builtins.cargo_deny
   ["cargo_fmt"] = Builtins.cargo_fmt
   ["check_added_large_files"] = Builtins.check_added_large_files
   ["check_case_conflict"] = Builtins.check_case_conflict
@@ -19,6 +21,7 @@ local linters = new Mapping<String, Step> {
   ["newlines"] = Builtins.newlines
   ["pinact_update"] = Builtins.pinact_update
   ["pkl_format"] = Builtins.pkl_format
+  ["tombi_format"] = Builtins.tombi_format
   ["trailing_whitespace"] = Builtins.trailing_whitespace
   ["zizmor"] = Builtins.zizmor
 }
