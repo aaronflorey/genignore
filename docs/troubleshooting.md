@@ -59,7 +59,7 @@ git submodule update --init --recursive
 Then rebuild:
 
 ```bash
-go build ./...
+cargo build --workspace
 ```
 
 CI always checks out submodules recursively (`.github/workflows/ci.yml`, `submodules: recursive`).
@@ -130,7 +130,7 @@ genignore resolve --verbose
 
 **Symptom**: The current OS is always detected as a provider.
 
-**Cause**: OS detectors match based on `runtime.GOOS` and are host-only heuristics. They do not inspect repository files.
+**Cause**: OS detectors match based on the host operating system and are host-only heuristics. They do not inspect repository files.
 
 **Fix**: Exclude them if not needed:
 
@@ -166,7 +166,7 @@ If the diff is empty, the block is already up to date.
 
 **Symptom**: Lines outside `# BEGIN genignore` / `# END genignore` appear changed after running `detect`.
 
-**Cause**: This should not happen. The merge logic in `internal/gitignore/manager.go` (`mergeManagedBlock`) only replaces content between the markers. If the file has no markers, the managed block is prepended.
+**Cause**: This should not happen. The merge logic in `crates/genignore-core/src/manager.rs` (`merge_managed_block`) only replaces content between the markers. If the file has no markers, the managed block is prepended.
 
 **Fix**: If this occurs, it is a bug. Report it with the exact `.gitignore` content before and after, and the `genignore doctor` output.
 
@@ -174,7 +174,7 @@ If the diff is empty, the block is already up to date.
 
 ### Template snapshot tests fail
 
-**Symptom**: `go test ./internal/templatecatalog` fails.
+**Symptom**: `cargo build -p genignore-core` or `cargo test -p genignore-core` fails in `build.rs` with a missing template catalog.
 
 **Cause**: The `github/gitignore` submodule is not initialized or is out of sync with the embedded snapshot.
 
@@ -182,28 +182,30 @@ If the diff is empty, the block is already up to date.
 
 ```bash
 git submodule update --init --recursive
-go test ./internal/templatecatalog
+cargo test -p genignore-core
 ```
 
 ### Rule catalog tests fail
 
-**Symptom**: `go test ./internal/rulecatalog` fails.
+**Symptom**: `cargo test -p genignore-detection` catalog tests fail.
 
 **Cause**: The embedded `rules.json` is missing, invalid, or references a provider not in the embedded template catalog.
 
 **Fix**: Ensure the submodule is initialized, then check `internal/rulecatalog/rules.json` for structural issues. The catalog uses strict JSON decoding and validates that every provider key exists in the embedded template or custom template catalogs.
 
-### GoReleaser validation fails
+### Release build fails
 
-**Symptom**: `goreleaser check` reports errors.
+**Symptom**: `cargo build --release -p genignore-cli` reports errors.
 
-**Fix**: Run locally to see details:
+**Fix**: Run the full verification to see details:
 
 ```bash
-mise x -- goreleaser check
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-Common causes include schema changes in GoReleaser v2 or misconfigured build/archive sections in `.goreleaser.yaml`.
+Common causes include a missing `github-gitignore` submodule checkout (the build script embeds it), an old Rust toolchain, or clippy warnings promoted to errors by `-D warnings`.
 
 ## Escalation
 

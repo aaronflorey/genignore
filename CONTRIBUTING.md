@@ -4,8 +4,8 @@ Thanks for your interest in contributing to `genignore`! This guide covers the b
 
 ## Prerequisites
 
-- Go 1.22+ (see `go.mod` for the exact version)
-- [mise](https://mise.jdx.dev/) for release tooling (`goreleaser`)
+- A current stable Rust toolchain (see `mise.toml` for the pinned version)
+- [mise](https://mise.jdx.dev/) for the pinned toolchain and hook tooling (`rust`, `hk`)
 - Git with submodules enabled
 
 ## Local setup
@@ -23,17 +23,12 @@ Thanks for your interest in contributing to `genignore`! This guide covers the b
    git submodule update --init --recursive
    ```
 
-3. Download Go module dependencies:
+3. Fetch crate dependencies and verify your environment:
 
    ```bash
-   go mod download
-   ```
-
-4. Verify your environment:
-
-   ```bash
-   go build ./...
-   go test ./...
+   cargo fetch
+   cargo build --workspace
+   cargo test --workspace
    ```
 
 ## Development workflow
@@ -44,13 +39,13 @@ Quick reference:
 
 | Purpose | Command |
 | --- | --- |
-| Build | `go build ./...` |
-| Test all | `go test ./...` |
-| Test one package | `go test ./internal/provider` |
-| Run from source | `go run . detect --dry-run` |
-| Lint (CI uses) | `golangci-lint run` |
-| Validate release config | `mise x -- goreleaser check` |
-| Snapshot release build | `mise x -- goreleaser release --snapshot --clean --skip=publish` |
+| Build | `cargo build --workspace` |
+| Test all | `cargo test --workspace` |
+| Test one crate | `cargo test -p genignore-core` |
+| Run from source | `cargo run -p genignore-cli -- detect --dry-run` |
+| Lint (CI uses) | `cargo clippy --workspace --all-targets -- -D warnings` |
+| Format check | `cargo fmt --all -- --check` |
+| Release build | `cargo build --release -p genignore-cli` |
 
 ## Commit conventions
 
@@ -71,11 +66,11 @@ Use squash-merge when merging PRs for cleaner changelogs.
 1. Open your PR against `main`.
 2. Ensure CI checks pass (`lint-and-test` and `release-validation` jobs in `.github/workflows/ci.yml`).
 3. Keep PR scope focused and include or update tests when behavior changes.
-4. If changes affect packaging, validate with `mise x -- goreleaser check` and `mise x -- goreleaser build --snapshot --clean`.
+4. If changes affect packaging, validate with `cargo build --release -p genignore-cli` and the offline smoke check in `docs/TESTING.md`.
 
 ## Testing notes
 
-- Tests use Go's standard `testing` package alongside implementation as `*_test.go`.
+- Tests use Rust's built-in harness: `#[cfg(test)]` modules plus `crates/<crate>/tests/`.
 - `testdata/repos/` contains minimal fixture repos for detector testing &mdash; keep them small and secret-free.
 - `testdata/contracts/` contains machine-readable output contracts &mdash; update only for intentional output changes.
 - See [`docs/TESTING.md`](docs/TESTING.md) for detailed testing guidance.

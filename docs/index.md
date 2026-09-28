@@ -1,6 +1,6 @@
 # genignore Documentation
 
-`genignore` is a Go CLI that detects project providers in the current directory, loads embedded `.gitignore` template content from the checked-in `github/gitignore` snapshot plus local custom templates, and updates only the managed marker block in `.gitignore` — preserving all user-owned lines outside the markers.
+`genignore` is a Rust CLI that detects project providers in the current directory, loads embedded `.gitignore` template content from the checked-in `github/gitignore` snapshot plus local custom templates, and updates only the managed marker block in `.gitignore` — preserving all user-owned lines outside the markers.
 
 ## What this documentation covers
 
@@ -44,4 +44,4 @@
 - **Scope is the current directory only**: no monorepo traversal or recursive project discovery beyond one level of subdirectories.
 - **Machine-level config only**: no per-project preset files or repository-local configuration. Only `$HOME/.config/genignore/config.toml` is supported.
 - **No plugin system**: providers and detectors are compiled into the binary. Adding a custom provider requires source changes (see [Development](DEVELOPMENT.md)).
-- **No `LICENSE` file**: the repository does not currently include a license file.
+- **Git root requirement**: `detect`, `add`, `resolve`, and `doctor` must run from the top-level of a Git working tree; `list` and `search` work anywhere.

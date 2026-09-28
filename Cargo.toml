@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/genignore-cli",
+    "crates/genignore-core",
+    "crates/genignore-detection",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/aaronflorey/genignore"
+
+[profile.release]
+lto = true
+strip = true

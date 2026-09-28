@@ -1,7 +1,7 @@
 version: 2
 
 updates:
-  - package-ecosystem: gomod
+  - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
@@ -9,7 +9,7 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
-      go-minor:
+      cargo-minor:
         update-types:
           - minor
           - patch

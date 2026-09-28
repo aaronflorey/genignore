@@ -24,29 +24,114 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  goreleaser:
+  build-artifacts:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, artifact_os: linux, artifact_arch: amd64, ext: tar.gz }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, artifact_os: linux, artifact_arch: arm64, ext: tar.gz }
+          - { os: macos-15-intel, target: x86_64-apple-darwin, artifact_os: darwin, artifact_arch: amd64, ext: tar.gz }
+          - { os: macos-latest, target: aarch64-apple-darwin, artifact_os: darwin, artifact_arch: arm64, ext: tar.gz }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, artifact_os: windows, artifact_arch: amd64, ext: zip }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc, artifact_os: windows, artifact_arch: arm64, ext: zip }
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           ref: ${{ needs.release-please.outputs.tag_name }}
           submodules: recursive
 
-      - uses: actions/setup-go@v5
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
+          targets: ${{ matrix.target }}
 
-      - uses: goreleaser/goreleaser-action@v6
+      - name: Build release binary
+        run: cargo build --release -p genignore-cli --target ${{ matrix.target }}
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          name="genignore_${version}_${{ matrix.artifact_os }}_${{ matrix.artifact_arch }}"
+          mkdir -p "dist/$name"
+          bin="genignore"
+          if [ "${{ matrix.artifact_os }}" = "windows" ]; then
+            bin="genignore.exe"
+          fi
+          cp "target/${{ matrix.target }}/release/$bin" "dist/$name/$bin"
+          cp README.md "dist/$name/"
+          if [ "${{ matrix.ext }}" = "zip" ]; then
+            (cd dist && 7z a "${name}.zip" "${name}" >/dev/null)
+          else
+            tar -czf "dist/$name.tar.gz" -C dist "$name"
+          fi
+          (cd dist && sha256sum "$name.${{ matrix.ext }}" > "$name.${{ matrix.ext }}.sha256")
+
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v2
         with:
-          version: v2.15.2
-          args: release --clean
+          tag_name: ${{ env.TAG }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+
+  homebrew:
+    needs: [release-please, build-artifacts]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+    steps:
+      - name: Update Homebrew cask
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          repo="aaronflorey/genignore"
+          base="https://github.com/$repo/releases/download/$TAG"
+
+          darwin_arm="genignore_${version}_darwin_arm64.tar.gz"
+          darwin_intel="genignore_${version}_darwin_amd64.tar.gz"
+          sha_arm="$(curl -fsSL "$base/$darwin_arm.sha256" | awk '{print $1}')"
+          sha_intel="$(curl -fsSL "$base/$darwin_intel.sha256" | awk '{print $1}')"
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_GITHUB_TOKEN}@github.com/aaronflorey/homebrew-tap.git" tap
+          cd tap
+          mkdir -p Casks
+          cat > Casks/genignore.rb <<EOF
+          cask "genignore" do
+            version "$version"
+            sha256 arm: "$sha_arm",
+                   intel: "$sha_intel"
+
+            url "https://github.com/aaronflorey/genignore/releases/download/v#{version}/genignore_#{version}_darwin_#{arch == :arm ? "arm64" : "amd64"}.tar.gz",
+                verified: "github.com/aaronflorey/genignore/"
+            name "genignore"
+            desc "Generate and maintain safe .gitignore blocks"
+            homepage "https://github.com/aaronflorey/genignore"
+
+            binary "genignore"
+
+            postflight do
+              system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/genignore"]
+            end
+          end
+          EOF
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add Casks/genignore.rb
+          git commit -m "genignore $version" || echo "no changes"
+          git push

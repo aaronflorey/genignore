@@ -16,21 +16,32 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
+          components: clippy, rustfmt
 
-      - name: Lint
-        uses: golangci/golangci-lint-action@v8
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
-      # `go test ./...` includes the embedded catalog and rule-catalog package
-      # tests, so CI fails if the embedded github-gitignore snapshot or
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # `cargo test --workspace` includes the embedded catalog and rule-catalog
+      # checks, so CI fails if the embedded github-gitignore snapshot or
       # rules.json asset is missing, empty, or invalid.
       - name: Test
-        run: go test ./...
+        run: cargo test --workspace
 
   release-validation:
     runs-on: ubuntu-latest
@@ -41,33 +52,32 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Validate GoReleaser config
-        uses: goreleaser/goreleaser-action@v6
+      - name: Cache cargo
+        uses: actions/cache@v4
         with:
-          version: v2.15.2
-          args: check
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-release-
 
-      - name: Build release snapshot archives
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: v2.15.2
-          args: release --snapshot --clean --skip=publish
+      - name: Build release binary
+        run: cargo build --release -p genignore-cli
 
-      - name: Smoke test packaged Linux artifact
+      - name: Package and smoke test artifact
         shell: bash
         run: |
           set -euo pipefail
 
-          archive=$(ls dist/genignore_*_linux_amd64.tar.gz)
           smoke_dir=$(mktemp -d)
-          tar -xzf "$archive" -C "$smoke_dir"
+          mkdir -p "$smoke_dir/pkg"
+          cp target/release/genignore README.md "$smoke_dir/pkg/"
+          tar -czf "$smoke_dir/genignore_0.0.0_linux_amd64.tar.gz" -C "$smoke_dir/pkg" .
+          tar -xzf "$smoke_dir/genignore_0.0.0_linux_amd64.tar.gz" -C "$smoke_dir"
 
           test -x "$smoke_dir/genignore"
           test -f "$smoke_dir/README.md"
