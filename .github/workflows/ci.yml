@@ -24,7 +24,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
 
       # `go test ./...` includes the embedded catalog and rule-catalog package
       # tests, so CI fails if the embedded github-gitignore snapshot or
