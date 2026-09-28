@@ -1,0 +1,20 @@
+[package]
+name = "genignore-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "genignore command-line binary"
+
+[[bin]]
+name = "genignore"
+path = "src/main.rs"
+
+[dependencies]
+genignore-core = { path = "../genignore-core" }
+genignore-detection = { path = "../genignore-detection" }
+usage-lib = "6"
+serde = "1"
+serde_json = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

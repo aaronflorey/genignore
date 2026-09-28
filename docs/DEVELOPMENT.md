@@ -9,59 +9,59 @@ git clone <your-fork-url>
 cd genignore
 ```
 
-2. Confirm your toolchain matches module requirements (`go 1.22` in `go.mod`):
+2. Confirm your Rust toolchain is installed (`rustup` or `mise install` for the pinned version in `mise.toml`):
 
 ```bash
-go version
+cargo --version
 ```
 
-3. Download module dependencies:
+3. Initialize the template submodule (required — `genignore-core/build.rs` embeds it):
 
 ```bash
-go mod download
+git submodule update --init --recursive
 ```
 
 4. Run a local verification pass before opening a PR:
 
 ```bash
-go build ./...
-go test ./...
-mise x -- goreleaser check
-mise x -- goreleaser build --snapshot --clean
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build --release -p genignore-cli
 ```
 
 5. Run commands directly from source while developing:
 
 ```bash
-go run . detect --dry-run
+cargo run -p genignore-cli -- detect --dry-run
 ```
 
 ## Build commands
 
-This repository does not use npm-based script runners. Development and validation use Go module commands plus release tooling.
+This repository does not use npm-based script runners. Development and validation use Cargo commands plus release tooling.
 
 | Command | Description |
 | --- | --- |
-| `go build ./...` | Compile all packages in this module. |
-| `go test ./...` | Run all tests in this module. |
-| `go run . detect` | Run provider detection from source and update the managed `.gitignore` block. |
-| `go run . detect --dry-run` | Preview detection output and file action without writing. |
-| `go run . add <keys...>` | Add provider keys to the existing managed set. |
-| `go run . list` | Print all supported provider keys from the provider catalog. |
-| `go run . search <term>` | Search provider keys by term. |
-| `mise x -- goreleaser check` | Validate `.goreleaser.yaml` locally (equivalent intent to CI release validation). |
-| `mise x -- goreleaser build --snapshot --clean` | Build release artifacts locally without publishing a release. |
+| `cargo build --workspace` | Compile all crates in this workspace. |
+| `cargo test --workspace` | Run all tests in this workspace. |
+| `cargo run -p genignore-cli -- detect` | Run provider detection from source and update the managed `.gitignore` block. |
+| `cargo run -p genignore-cli -- detect --dry-run` | Preview detection output and file action without writing. |
+| `cargo run -p genignore-cli -- add <keys...>` | Add provider keys to the existing managed set. |
+| `cargo run -p genignore-cli -- list` | Print all supported provider keys from the provider catalog. |
+| `cargo run -p genignore-cli -- search <term>` | Search provider keys by term. |
+| `cargo build --release -p genignore-cli` | Build the release binary (equivalent intent to CI release validation). |
 
 ## Code style
 
-- **Formatting:** use standard Go formatting (`gofmt`/`go fmt`) for changed files.
-- **Linting tool:** CI runs `golangci/golangci-lint-action@v8` in `.github/workflows/ci.yml` (`lint-and-test` job, `Lint` step).
-- **Lint configuration:** CI relies on the workflow's `golangci-lint` action settings rather than a repo-local lint config file.
-- **CI quality gate:** the same CI job also runs `go test ./...`.
+- **Formatting:** use `cargo fmt --all` for changed files; CI checks with `cargo fmt --all -- --check`.
+- **Linting tool:** CI runs `cargo clippy --workspace --all-targets -- -D warnings` in `.github/workflows/ci.yml` (`lint-and-test` job).
+- **Lint configuration:** clippy is configured through crate-level lints in `Cargo.toml` rather than a separate config file.
+- **CI quality gate:** the same CI job also runs `cargo test --workspace`.
+- **Hooks:** `hk` runs the pre-commit/CI linters defined in `hk.pkl` (`cargo fmt`, `cargo clippy`, secrets, whitespace, etc.).
 
 ## Branch conventions
 
-- The repository's release workflow runs on pushes to `main` (`.github/workflows/release-please.yml`), so `main` is the effective default branch.
+- The repository's release workflow runs on pushes to `main` (`.github/workflows/release.yaml`), so `main` is the effective default branch.
 - No repository-specific branch naming convention is documented.
 
 ## PR process
@@ -70,4 +70,4 @@ This repository does not use npm-based script runners. Development and validatio
 - Ensure GitHub Actions checks pass in `.github/workflows/ci.yml` (`lint-and-test` and `release-validation`).
 - Use conventional commit types (`feat`, `fix`, `perf`, `docs`, `test`, `refactor`, `chore`) so `release-please` can map commit types to changelog sections (`release-please-config.json`).
 - Keep PR scope focused and include or update tests when behavior changes.
-- If changes affect packaging, validate release configuration with `mise x -- goreleaser check` and confirm snapshot build compatibility (`mise x -- goreleaser build --snapshot --clean`).
+- If changes affect packaging, validate the release build locally with `cargo build --release -p genignore-cli` and run the offline smoke check in `docs/TESTING.md`.

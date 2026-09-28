@@ -2,10 +2,11 @@
 
 ## Test framework and setup
 
-This repository uses Go's standard `testing` package. The module requires Go `1.22` (`go.mod`), so install a compatible Go toolchain and download dependencies before running tests:
+This repository uses Rust's built-in test harness. The workspace requires a current stable Rust toolchain (see `rust-toolchain`/mise or `Cargo.toml`), plus `git` for the fixture helpers that initialize temporary repositories. Initialize the template submodule before running tests — `genignore-core/build.rs` embeds its snapshot and fails the build when it is missing:
 
 ```bash
-go mod download
+git submodule update --init --recursive
+cargo fetch
 ```
 
 ## Running tests
@@ -13,34 +14,39 @@ go mod download
 Run the full suite:
 
 ```bash
-go test ./...
+cargo test --workspace
 ```
 
 This command already covers the embedded-asset checks:
 
-- `internal/templatecatalog` verifies the embedded `github-gitignore` snapshot loads, stays sorted, and matches the checked-out submodule files.
-- `internal/rulecatalog` verifies the embedded `rules.json` catalog loads and rejects invalid catalog structure.
-- `internal/app` contract tests exercise the embedded-backed CLI JSON contracts added for detect/resolve/doctor stability.
+- `genignore-core`'s build script embeds the `github-gitignore` snapshot, so `cargo test --workspace` fails when the checked-out submodule files are missing.
+- `crates/genignore-detection/tests/` verifies the embedded `rules.json` catalog loads and rejects invalid catalog structure, unsafe rule paths, and duplicate providers.
+- `crates/genignore-core/tests/contracts.rs` exercises the byte-exact CLI JSON and managed-block contracts under `testdata/contracts/`.
 
-Run one package:
+Run one crate:
 
 ```bash
-go test ./internal/provider
+cargo test -p genignore-core
 ```
 
 Run one test by name:
 
 ```bash
-go test ./internal/app -run TestListCommand
+cargo test -p genignore-core --test contracts detect_diff_next_vscode_app_contract
 ```
 
-Run with coverage output:
+Run with lint gates equivalent to CI:
 
 ```bash
-go test ./... -coverprofile=coverage.out
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 Watch mode is not configured in this repository.
+
+## Fixture repositories
+
+Fixture repositories under `testdata/repos/` stay minimal — only detector-relevant files, no history, no vendored code. Tests that assert Git working-tree behavior (`detect`, `add`, `resolve`, `doctor` must run at the repository top-level) copy the fixture to a temporary directory and `git init` it before asserting, so fixture setup stays reproducible and outside-marker assertions never depend on this repository's own `.git`.
 
 ## Manual offline release verification
 
@@ -49,17 +55,18 @@ Use this check when validating a release artifact or a local build against the e
 1. Build the binary:
 
 ```bash
-go build -o ./dist/genignore-manual .
-binary_path="$PWD/dist/genignore-manual"
+cargo build --release -p genignore-cli
+binary_path="$PWD/target/release/genignore"
 ```
 
-2. Create a clean temporary repo and clean home/cache roots with no warm-up state:
+2. Create a clean temporary git repo and clean home/cache roots with no warm-up state:
 
 ```bash
 tmp_root="$(mktemp -d)"
 repo_dir="$tmp_root/repo"
 home_dir="$tmp_root/home"
 mkdir -p "$repo_dir" "$home_dir/.cache"
+git -C "$repo_dir" init -q
 printf '{"name":"offline-check"}\n' > "$repo_dir/package.json"
 ```
 
@@ -82,10 +89,9 @@ Expected result: the command succeeds with network disabled, writes a managed bl
 
 ## Writing new tests
 
-- Keep tests colocated with implementation and use the `*_test.go` pattern (for example `internal/app/service_test.go`, `internal/gitignore/manager_test.go`).
-- Prefer table-driven tests with `t.Run(...)` for multi-case behavior (for example in `internal/provider/detectors_test.go`).
-- Use `t.Parallel()` for independent tests to reduce suite runtime.
-- Reuse CLI helpers in `internal/app/cli_test.go`, including `captureRunOutput(...)` and `captureRunOutputWithHome(...)`, for command-output assertions.
+- Unit tests live in `#[cfg(test)]` modules next to implementation; crate-level behavioral tests live in `crates/<crate>/tests/`.
+- Prefer table-driven loops over repeated cases (for example in `crates/genignore-detection/tests/detection.rs`).
+- Contract fixtures belong under `testdata/contracts/` and `testdata/repos/`; update them only with intentional, reviewed output changes.
 - Prefer embedded-fixture tests for provider catalogs, template content, and JSON rule-catalog behavior so network assumptions do not leak back into the suite.
 
 ## Coverage requirements
@@ -106,8 +112,8 @@ Tests run in GitHub Actions via `.github/workflows/ci.yml`.
 - **Workflow:** `ci`
 - **Triggers:** `push`, `pull_request`
 - **Job:** `lint-and-test`
-- **Test command:** `go test ./...`
+- **Test command:** `cargo test --workspace`
 
-No extra CI-only asset check is required today: the package tests above already make `go test ./...` fail when embedded catalog files or the rule catalog are missing or invalid.
+No extra CI-only asset check is required today: the crate tests above already make `cargo test --workspace` fail when embedded catalog files or the rule catalog are missing or invalid.
 
-The same job runs linting (`golangci/golangci-lint-action@v8`) before the test step.
+The same job runs `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` before the test step.

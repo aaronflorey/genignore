@@ -5,12 +5,12 @@
 [![Release](https://github.com/aaronflorey/genignore/actions/workflows/release.yaml/badge.svg)](https://github.com/aaronflorey/genignore/actions/workflows/release.yaml)
 [![Latest Release](https://img.shields.io/github/v/release/aaronflorey/genignore?sort=semver)](https://github.com/aaronflorey/genignore/releases/latest)
 
-`genignore` is a Go CLI for developers who want deterministic `.gitignore` generation while preserving manual rules outside a managed marker block.
+`genignore` is a Rust CLI for developers who want deterministic `.gitignore` generation while preserving manual rules outside a managed marker block.
 
 ## Installation
 
 ```bash
-go install github.com/aaronflorey/genignore@latest
+cargo install --git https://github.com/aaronflorey/genignore genignore-cli
 ```
 
 If you use Homebrew:
@@ -58,7 +58,8 @@ If you are working from source:
 ```bash
 git clone https://github.com/aaronflorey/genignore.git
 cd genignore
-go run . detect
+git submodule update --init --recursive
+cargo run -p genignore-cli -- detect
 ```
 
 ## Usage examples
@@ -126,9 +127,9 @@ For local setup, build, test, lint, and release-verification commands, see [`doc
 Quick reference:
 
 ```bash
-go build ./...          # compile all packages
-go test ./...           # run all tests
-go run . detect --dry-run  # smoke test without writing .gitignore
+cargo build --workspace      # compile all crates
+cargo test --workspace       # run all tests
+cargo run -p genignore-cli -- detect --dry-run  # smoke test without writing .gitignore
 ```
 
 For testing details, see [`docs/TESTING.md`](docs/TESTING.md). For architecture overview, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

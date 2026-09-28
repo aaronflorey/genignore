@@ -1,6 +1,6 @@
 # CLI Reference
 
-`genignore` is a Cobra-based CLI with six commands and two persistent flags. All commands operate on the current working directory only.
+`genignore` is a Rust CLI with six commands and two persistent flags. All commands operate on the current working directory only.
 
 ## Global flags
 
