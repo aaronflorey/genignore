@@ -117,6 +117,68 @@ fn glob_only_signals_match_csproj() {
 }
 
 #[test]
+fn upstream_build_engine_signals_report_matching_evidence() {
+    let cases = [
+        ("gradle", "build.gradle"),
+        ("gradle", "build.gradle.kts"),
+        ("gradle", "settings.gradle"),
+        ("gradle", "settings.gradle.kts"),
+        ("cmake", "CMakeLists.txt"),
+        ("godot", "project.godot"),
+        ("unity", "ProjectSettings/ProjectVersion.txt"),
+    ];
+
+    for (provider, signal) in cases {
+        let dir = tempdir(&format!("{provider}-{signal}"));
+        let signal_path = dir.join(signal);
+        fs::create_dir_all(signal_path.parent().unwrap()).unwrap();
+        fs::write(&signal_path, "signal").unwrap();
+
+        let (matched, results) = scan_target(&ScanCtx::new(&dir), &detectors());
+        assert!(matched.contains(provider), "{provider} missed {signal}");
+        let result = results
+            .iter()
+            .find(|result| result.key == provider)
+            .unwrap();
+        assert!(result.matched, "{provider} did not match {signal}");
+        assert_eq!(result.evidence, signal_path.to_string_lossy());
+    }
+}
+
+#[test]
+fn upstream_javascript_runtime_and_framework_signals_report_evidence() {
+    let cases = [
+        ("angular", "angular.json", None),
+        ("deno", "deno.json", None),
+        ("deno", "deno.jsonc", None),
+        ("bun", "bun.lock", Some("node")),
+        ("bun", "bun.lockb", Some("node")),
+        ("nestjs", "nest-cli.json", None),
+    ];
+
+    for (provider, signal, also_matches) in cases {
+        let dir = tempdir(&format!("{provider}-{signal}"));
+        let signal_path = dir.join(signal);
+        fs::write(&signal_path, "{}").unwrap();
+
+        let (matched, results) = scan_target(&ScanCtx::new(&dir), &detectors());
+        assert!(matched.contains(provider), "{provider} missed {signal}");
+        let result = results
+            .iter()
+            .find(|result| result.key == provider)
+            .unwrap();
+        assert!(result.matched, "{provider} did not match {signal}");
+        assert_eq!(result.evidence, signal_path.to_string_lossy());
+        if let Some(additional_provider) = also_matches {
+            assert!(
+                matched.contains(additional_provider),
+                "{signal} should also match {additional_provider}"
+            );
+        }
+    }
+}
+
+#[test]
 fn scan_skips_gitignored_subdirs() {
     let dir = tempdir("ignored");
     git_init(&dir);
@@ -330,10 +392,18 @@ fn rule_sorting_is_deterministic() {
 #[test]
 fn embedded_rule_catalog_loads() {
     let entries = catalog::load_rule_catalog(|_| true).unwrap();
-    assert_eq!(entries.len(), 19);
+    assert_eq!(entries.len(), 27);
     let providers: Vec<&str> = entries.iter().map(|e| e.provider.as_str()).collect();
     assert!(providers.contains(&"node"));
     assert!(providers.contains(&"terraform"));
+    assert!(providers.contains(&"angular"));
+    assert!(providers.contains(&"bun"));
+    assert!(providers.contains(&"deno"));
+    assert!(providers.contains(&"nestjs"));
+    assert!(providers.contains(&"gradle"));
+    assert!(providers.contains(&"cmake"));
+    assert!(providers.contains(&"godot"));
+    assert!(providers.contains(&"unity"));
     let mut sorted = providers.clone();
     sorted.sort();
     assert_eq!(providers, sorted);

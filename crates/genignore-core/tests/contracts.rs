@@ -120,6 +120,37 @@ fn resolve_next_vscode_app_contract() {
 }
 
 #[test]
+fn resolve_angular_nest_bun_selects_templates_in_provider_order() {
+    let dir = fixture("angular-nest-bun");
+    let svc = restricted_service(&dir, &["angular", "bun", "nestjs", "node"]);
+
+    let resolved = svc.resolve(&[], &[]).unwrap();
+    let expected = vec![
+        "angular".to_string(),
+        "bun".to_string(),
+        "nestjs".to_string(),
+        "node".to_string(),
+    ];
+    assert_eq!(resolved.detected_providers, expected);
+    assert_eq!(resolved.final_providers, expected);
+
+    let preview = svc.detect(&[], &[], true, true).unwrap();
+    assert_eq!(preview.final_providers, expected);
+    assert!(preview.preview_only);
+    assert!(preview.diff.lines().any(|line| {
+        line.starts_with("+# Provenance: github/gitignore@")
+            && line.ends_with(" [angular,bun,nestjs,node]")
+    }));
+    for template_line in ["+/.angular/", "+node_modules.bun", "+# Nestjs specific"] {
+        assert!(
+            preview.diff.contains(template_line),
+            "missing {template_line}"
+        );
+    }
+    assert!(!dir.join(".gitignore").exists(), "dry-run must not write");
+}
+
+#[test]
 fn doctor_laravel_jetbrains_app_contract() {
     let dir = fixture("laravel-jetbrains-app");
     let svc = restricted_service(&dir, &["composer", "jetbrains", "laravel"]);

@@ -42,10 +42,10 @@
       "laravel"
     ],
     "ruleCatalogStatus": "loaded",
-    "ruleCatalogProviderCount": 19,
+    "ruleCatalogProviderCount": 27,
     "decisions": [
       "provider support is validated against the embedded github/gitignore catalog snapshot (274 providers)",
-      "repository detection is backed by the embedded JSON rule catalog (19 providers)"
+      "repository detection is backed by the embedded JSON rule catalog (27 providers)"
     ]
   },
   "provenance": [

@@ -15,6 +15,37 @@
       ]
     },
     {
+      "provider": "angular",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "angular.json"
+        }
+      ]
+    },
+    {
+      "provider": "bun",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "bun.lock"
+        },
+        {
+          "type": "file_path",
+          "path": "bun.lockb"
+        }
+      ]
+    },
+    {
+      "provider": "cmake",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "CMakeLists.txt"
+        }
+      ]
+    },
+    {
       "provider": "composer",
       "match": [
         {
@@ -33,11 +64,54 @@
       ]
     },
     {
+      "provider": "deno",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "deno.json"
+        },
+        {
+          "type": "file_path",
+          "path": "deno.jsonc"
+        }
+      ]
+    },
+    {
       "provider": "go",
       "match": [
         {
           "type": "file_path",
           "path": "go.mod"
+        }
+      ]
+    },
+    {
+      "provider": "godot",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "project.godot"
+        }
+      ]
+    },
+    {
+      "provider": "gradle",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "build.gradle"
+        },
+        {
+          "type": "file_path",
+          "path": "build.gradle.kts"
+        },
+        {
+          "type": "file_path",
+          "path": "settings.gradle"
+        },
+        {
+          "type": "file_path",
+          "path": "settings.gradle.kts"
         }
       ]
     },
@@ -138,6 +212,15 @@
       ]
     },
     {
+      "provider": "nestjs",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "nest-cli.json"
+        }
+      ]
+    },
+    {
       "provider": "python",
       "match": [
         {
@@ -229,6 +312,15 @@
         {
           "type": "file_path",
           "path": ".terraform.lock.hcl"
+        }
+      ]
+    },
+    {
+      "provider": "unity",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "ProjectSettings/ProjectVersion.txt"
         }
       ]
     },
