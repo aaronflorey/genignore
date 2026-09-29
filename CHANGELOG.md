@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.6.0](https://github.com/aaronflorey/genignore/compare/v1.5.0...v1.6.0) (2026-09-28)
+
+
+### Features
+
+* **api:** resolve GitHub token for authenticated requests ([149f88a](https://github.com/aaronflorey/genignore/commit/149f88a61022a99ace8ee1752dca98391089fe1f))
+* **provider:** add embedded catalogs and rule-backed detectors ([1e438de](https://github.com/aaronflorey/genignore/commit/1e438dea4d4b1955260ddf19d2765f23b798ef08))
+* **rulecatalog:** add catalog and upstream commit support ([f15f75f](https://github.com/aaronflorey/genignore/commit/f15f75fccbd22b938e483cafec604ca645f50687))
+* **templatecatalog:** embed upstream gitignore catalog ([b6dcf50](https://github.com/aaronflorey/genignore/commit/b6dcf505ef7cc4b8e13c29e6b69658c65a3ea7a6))
+
+
+### Fixes
+
+* **provider:** harden signal file detection and rule paths ([bd1a25e](https://github.com/aaronflorey/genignore/commit/bd1a25e50513054080b1b6f16b4f3248ee0f243e))
+
 ## [1.5.0](https://github.com/aaronflorey/genignore/compare/v1.4.0...v1.5.0) (2026-05-28)
 
 
