@@ -1,6 +1,6 @@
 [package]
 name = "genignore-detection"
-version = "0.1.0"
+version = "2.0.0"
 edition.workspace = true
 description = "Provider signal detection and Git working-tree gating for genignore"
 license.workspace = true
