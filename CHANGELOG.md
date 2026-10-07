@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.0.0](https://github.com/aaronflorey/genignore/compare/v1.5.0...v2.0.0) (2026-10-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* port genignore CLI from Go to a 3-crate Rust workspace ([#17](https://github.com/aaronflorey/genignore/issues/17))
+
+### Features
+
+* **api:** resolve GitHub token for authenticated requests ([149f88a](https://github.com/aaronflorey/genignore/commit/149f88a61022a99ace8ee1752dca98391089fe1f))
+* **detection:** expand embedded repository rules for upstream templates ([648c50e](https://github.com/aaronflorey/genignore/commit/648c50e7e9aec9e31b3e6b7001ca73a315501dab))
+* port genignore CLI from Go to a 3-crate Rust workspace ([#17](https://github.com/aaronflorey/genignore/issues/17)) ([ae2c776](https://github.com/aaronflorey/genignore/commit/ae2c776cc6a1b3b4e2e2d5b7c4603b4a35735df6))
+* **provider:** add embedded catalogs and rule-backed detectors ([1e438de](https://github.com/aaronflorey/genignore/commit/1e438dea4d4b1955260ddf19d2765f23b798ef08))
+* **rulecatalog:** add catalog and upstream commit support ([f15f75f](https://github.com/aaronflorey/genignore/commit/f15f75fccbd22b938e483cafec604ca645f50687))
+* **templatecatalog:** embed upstream gitignore catalog ([b6dcf50](https://github.com/aaronflorey/genignore/commit/b6dcf505ef7cc4b8e13c29e6b69658c65a3ea7a6))
+
+
+### Fixes
+
+* **provider:** harden signal file detection and rule paths ([bd1a25e](https://github.com/aaronflorey/genignore/commit/bd1a25e50513054080b1b6f16b4f3248ee0f243e))
+
 ## [1.5.0](https://github.com/aaronflorey/genignore/compare/v1.4.0...v1.5.0) (2026-05-28)
 
 
