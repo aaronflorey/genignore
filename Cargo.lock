@@ -37,7 +37,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "genignore-cli"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "genignore-core",
  "genignore-detection",
@@ -49,7 +49,7 @@ dependencies = [
 
 [[package]]
 name = "genignore-core"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "genignore-detection",
  "serde",
@@ -59,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "genignore-detection"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -100,9 +100,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "libc"
-version = "0.2.189"
+version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "log"
@@ -346,15 +346,15 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "usage-argv"
-version = "6.11.1"
+version = "6.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "669a2fcdc2d909c0858fcf190d6135dd9fb303da3497f1b9fea8592bb414d74c"
+checksum = "95e0e816704b1c059bade81820deb21681403e303b7b1b43f7d103ccca52a561"
 
 [[package]]
 name = "usage-lib"
-version = "6.11.1"
+version = "6.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fe60917b97f6948229e63d3cbc59cebd78afd00bfb5ff788933b942cca01b11"
+checksum = "f0cf136cfca91925955392a6f4926998e07c9e83da69e812e7db1f903b51db41"
 dependencies = [
  "indexmap",
  "itertools",
