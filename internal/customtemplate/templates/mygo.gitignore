@@ -1,0 +1,6 @@
+# MyGo
+/build/
+/.mygo/
+mygo_windows_*.syso
+node_modules/
+/dist/

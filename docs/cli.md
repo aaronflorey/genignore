@@ -166,7 +166,7 @@ genignore doctor [flags]
 | `Embedded catalog providers:` | Count of providers in the embedded `github/gitignore` snapshot. |
 | `Selected providers:` | The selected provider set. |
 | `Rule catalog:` | Status (`loaded` or error) and provider count of the embedded JSON rule catalog. |
-| `Retained custom providers:` | Embedded custom providers (e.g., `ai-agents`, `wrangler`) in the selection. |
+| `Retained custom providers:` | Embedded custom providers in the selection. |
 | `Decision:` | Human-readable explanation of runtime decisions. |
 | `Provenance:` | The `# Provenance:` line that would be written to the managed block. |
 

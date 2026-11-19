@@ -14,6 +14,38 @@ const CUSTOM_TEMPLATES: &[(&str, &str)] = &[
         include_str!("../../../internal/customtemplate/templates/ai-agents.gitignore"),
     ),
     (
+        "foundry",
+        include_str!("../../../internal/customtemplate/templates/foundry.gitignore"),
+    ),
+    (
+        "mygo",
+        include_str!("../../../internal/customtemplate/templates/mygo.gitignore"),
+    ),
+    (
+        "nx",
+        include_str!("../../../internal/customtemplate/templates/nx.gitignore"),
+    ),
+    (
+        "playwright",
+        include_str!("../../../internal/customtemplate/templates/playwright.gitignore"),
+    ),
+    (
+        "supabase",
+        include_str!("../../../internal/customtemplate/templates/supabase.gitignore"),
+    ),
+    (
+        "turborepo",
+        include_str!("../../../internal/customtemplate/templates/turborepo.gitignore"),
+    ),
+    (
+        "vite",
+        include_str!("../../../internal/customtemplate/templates/vite.gitignore"),
+    ),
+    (
+        "wails",
+        include_str!("../../../internal/customtemplate/templates/wails.gitignore"),
+    ),
+    (
         "wrangler",
         include_str!("../../../internal/customtemplate/templates/wrangler.gitignore"),
     ),

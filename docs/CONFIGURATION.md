@@ -61,7 +61,7 @@ Independent of config file values, managed block normalization always enforces t
 
 ## Embedded source behavior
 
-Supported-provider validation comes from the embedded `github/gitignore` catalog snapshot shipped with the binary, plus the embedded `ai-agents` and `wrangler` templates.
+Supported-provider validation comes from the embedded `github/gitignore` catalog snapshot shipped with the binary, plus the embedded custom templates in `internal/customtemplate/templates`.
 
 - Template bodies are loaded from checked-in embedded content during normal command execution.
 - Repository-backed detectors use the embedded JSON rule catalog in `internal/rulecatalog/rules.json`.

@@ -104,7 +104,7 @@ genignore detect --exclude windows,macos
 
 Machine-level configuration supports only the `defaults` table. Unknown fields are rejected, so stale `[runtime]` settings now fail config loading instead of being ignored.
 
-The canonical supported-provider contract is the embedded `github/gitignore` catalog snapshot shipped with `genignore`, plus the embedded `ai-agents` and `wrangler` exceptions. Template bodies are loaded from checked-in content, so normal command execution does not require network access.
+The canonical supported-provider contract is the embedded `github/gitignore` catalog snapshot shipped with `genignore`, plus the embedded custom templates in `internal/customtemplate/templates`. Template bodies are loaded from checked-in content, so normal command execution does not require network access.
 
 Generated managed blocks now include a deterministic `# Provenance:` line that records the pinned `github/gitignore` commit and any embedded providers that contributed content.
 

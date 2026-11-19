@@ -77,6 +77,15 @@
       ]
     },
     {
+      "provider": "foundry",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "foundry.toml"
+        }
+      ]
+    },
+    {
       "provider": "go",
       "match": [
         {
@@ -178,6 +187,19 @@
       ]
     },
     {
+      "provider": "mygo",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "mygo.json"
+        },
+        {
+          "type": "file_path",
+          "path": "mygo.config.ts"
+        }
+      ]
+    },
+    {
       "provider": "nextjs",
       "match": [
         {
@@ -217,6 +239,24 @@
         {
           "type": "file_path",
           "path": "nest-cli.json"
+        }
+      ]
+    },
+    {
+      "provider": "nx",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "nx.json"
+        }
+      ]
+    },
+    {
+      "provider": "playwright",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "playwright.config.*"
         }
       ]
     },
@@ -269,6 +309,15 @@
       ]
     },
     {
+      "provider": "supabase",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "supabase/config.toml"
+        }
+      ]
+    },
+    {
       "provider": "symfony",
       "match": [
         {
@@ -316,6 +365,19 @@
       ]
     },
     {
+      "provider": "turborepo",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "turbo.json"
+        },
+        {
+          "type": "file_path",
+          "path": "turbo.jsonc"
+        }
+      ]
+    },
+    {
       "provider": "unity",
       "match": [
         {
@@ -334,6 +396,24 @@
         {
           "type": "file_path",
           "path": "*.code-workspace"
+        }
+      ]
+    },
+    {
+      "provider": "vite",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "vite.config.*"
+        }
+      ]
+    },
+    {
+      "provider": "wails",
+      "match": [
+        {
+          "type": "file_path",
+          "path": "wails.json"
         }
       ]
     }

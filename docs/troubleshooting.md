@@ -89,7 +89,7 @@ providers = ["go", "node"]
 
 **Symptom**: A warning line appears in output when using `--include` or `--add` with a key that is not in the embedded provider catalog.
 
-**Cause**: The provider key is not recognized. Supported keys come from the embedded `github/gitignore` snapshot plus the embedded `ai-agents` and `wrangler` custom templates.
+**Cause**: The provider key is not recognized. Supported keys come from the embedded `github/gitignore` snapshot plus the embedded custom templates in `internal/customtemplate/templates`.
 
 **Fix**: Check the list of supported keys:
 

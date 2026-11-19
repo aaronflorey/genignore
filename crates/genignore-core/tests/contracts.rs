@@ -50,6 +50,19 @@ fn git_init(dir: &Path) {
     assert!(status.success());
 }
 
+fn empty_fixture(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "genignore-contract-{}-{}-{:?}",
+        name,
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    git_init(&dir);
+    dir
+}
+
 fn contract(name: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../testdata/contracts")
@@ -189,6 +202,76 @@ fn detect_managed_block_next_vscode_app_contract() {
         !first_block.to_lowercase().contains("remote"),
         "managed block contains obsolete wording"
     );
+}
+
+#[test]
+fn add_embedded_custom_templates_emits_scaffold_rules() {
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "mygo",
+            &[
+                "/build/",
+                "/.mygo/",
+                "mygo_windows_*.syso",
+                "node_modules/",
+                "/dist/",
+            ],
+        ),
+        ("wails", &["build/bin", "node_modules", "frontend/dist"]),
+        ("vite", &["dist-ssr", "*.local", "!.vscode/extensions.json"]),
+        (
+            "playwright",
+            &[
+                "/test-results/",
+                "/playwright-report/",
+                "/blob-report/",
+                "/playwright/.auth/",
+            ],
+        ),
+        ("supabase", &[".branches", ".temp"]),
+        (
+            "foundry",
+            &[
+                "cache/",
+                "out/",
+                "/broadcast/*/31337/",
+                "/broadcast/**/dry-run/",
+            ],
+        ),
+        ("turborepo", &[".turbo", ".vercel", ".pnp.js"]),
+        (
+            "nx",
+            &[
+                "out-tsc",
+                ".nx/cache",
+                ".nx/workspace-data",
+                ".nx/migrate-runs",
+            ],
+        ),
+    ];
+
+    for (provider, rules) in cases {
+        let dir = empty_fixture(provider);
+        let svc = Service::new(dir.clone(), Default::default()).unwrap();
+        let res = svc.add(&[provider.to_string()], false, false).unwrap();
+        assert_eq!(
+            res.file_action, "created",
+            "{provider} did not create .gitignore"
+        );
+
+        let content = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        let provenance = format!("# Provenance: embedded [{}]", provider);
+        assert!(
+            content.lines().any(|line| line == provenance),
+            "{provider} missing embedded provenance"
+        );
+        for rule in *rules {
+            assert!(
+                content.lines().any(|line| line == *rule),
+                "{provider} missing rule {rule}"
+            );
+        }
+    }
 }
 
 #[test]
