@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/aaronflorey/genignore/compare/v2.0.0...v2.1.0) (2026-11-19)
+
+
+### Features
+
+* add more items ([db31716](https://github.com/aaronflorey/genignore/commit/db317164fdf1f45933b9a955f858078e5e6a1d22))
+
 ## [2.0.0](https://github.com/aaronflorey/genignore/compare/v1.5.0...v2.0.0) (2026-10-06)
 
 
